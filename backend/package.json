@@ -1,0 +1,33 @@
+{
+  "name": "codex-backend",
+  "version": "1.0.0",
+  "description": "Codex AI Code Review Platform — Backend API",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "db:setup": "mysql -u root -p codex_db < ../database/schema.sql && mysql -u root -p codex_db < ../database/procedures.sql && mysql -u root -p codex_db < ../database/triggers_views_events.sql"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "express-validator": "^7.2.0",
+    "groq-sdk": "^0.7.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.3",
+    "octokit": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.7.5",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.3"
+  }
+}

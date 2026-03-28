@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #050505;
+    color: rgba(255, 255, 255, 0.87);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  /* Premium custom scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Text selection */
+  ::selection {
+    background: rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+}
+
+@layer components {
+  /* Double-Bezel card (outer shell) */
+  .bezel-outer {
+    @apply bg-white/5 border border-white/10 p-[6px] rounded-[2rem];
+  }
+
+  /* Double-Bezel card (inner core) */
+  .bezel-inner {
+    @apply bg-white/[0.03] rounded-[calc(2rem-6px)];
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  }
+
+  /* Glass pill nav */
+  .glass-pill {
+    @apply bg-white/[0.06] border border-white/10 backdrop-blur-xl;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 0.5px rgba(255,255,255,0.04);
+  }
+
+  /* Eyebrow badge */
+  .eyebrow {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1
+           text-[10px] uppercase tracking-[0.2em] font-medium
+           bg-white/[0.06] border border-white/10 text-white/50;
+  }
+
+  /* Primary CTA button */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-full px-6 py-3
+           bg-violet-500 text-white font-medium text-sm
+           transition-all duration-300 ease-spring
+           hover:bg-violet-400 active:scale-[0.98];
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-full px-5 py-2.5
+           border border-white/10 text-white/70 text-sm font-medium
+           transition-all duration-300 ease-spring
+           hover:border-white/20 hover:text-white hover:bg-white/[0.04]
+           active:scale-[0.98];
+  }
+
+  /* Score color utilities */
+  .score-critical  { @apply text-red-400; }
+  .score-low       { @apply text-orange-400; }
+  .score-medium    { @apply text-amber-400; }
+  .score-good      { @apply text-emerald-400; }
+  .score-excellent { @apply text-violet-400; }
+
+  /* Severity dot */
+  .sev-info     { @apply bg-blue-400/70; }
+  .sev-low      { @apply bg-teal-400/70; }
+  .sev-medium   { @apply bg-amber-400/70; }
+  .sev-high     { @apply bg-orange-400/70; }
+  .sev-critical { @apply bg-red-400/70; }
+}
+
+/* Mesh gradient background blobs — fixed, no repaints */
+.mesh-bg::before,
+.mesh-bg::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(120px);
+  animation: pulse-glow 6s ease-in-out infinite;
+}
+
+.mesh-bg::before {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(109, 40, 217, 0.15) 0%, transparent 70%);
+  top: -200px;
+  right: -100px;
+}
+
+.mesh-bg::after {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%);
+  bottom: -150px;
+  left: -100px;
+  animation-delay: -3s;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.05); }
+}
