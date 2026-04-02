@@ -4,7 +4,7 @@
 .env
 .env.*
 !.env.example
-
+PROJECT_SPEC.md
 # -----------------------
 # NODE MODULES
 # -----------------------
