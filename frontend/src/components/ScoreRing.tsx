@@ -9,7 +9,7 @@ interface Props {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 8.5) return '#8b5cf6';  // violet — excellent
+  if (score >= 8.5) return 'var(--accent)';  // orange-red — excellent
   if (score >= 7)   return '#10b981';  // emerald — good
   if (score >= 5)   return '#f59e0b';  // amber — medium
   if (score >= 3)   return '#f97316';  // orange — low

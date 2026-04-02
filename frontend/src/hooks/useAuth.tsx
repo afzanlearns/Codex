@@ -28,12 +28,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function login(newToken: string, newUser: User) {
     localStorage.setItem('codex_token', newToken);
+    localStorage.removeItem('pg_code');
+    localStorage.removeItem('pg_language');
+    localStorage.removeItem('pg_review');
     setToken(newToken);
     setUser(newUser);
   }
 
   function logout() {
     localStorage.removeItem('codex_token');
+    localStorage.removeItem('pg_code');
+    localStorage.removeItem('pg_language');
+    localStorage.removeItem('pg_review');
     setToken(null);
     setUser(null);
   }

@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import pool from '../db/connection';
 import { reviewCode } from '../services/aiService';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import jwt from 'jsonwebtoken';
+import { updateStreak } from './reviewController';
 
 export const playgroundValidators = [
   body('code').isString().isLength({ min: 10, max: 50000 }).withMessage('Code must be 10–50000 characters'),
@@ -23,8 +25,18 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
     rules?: string[];
   };
 
-  // Use authenticated user ID or a guest placeholder (0)
-  const developerId = req.user?.id || 1;
+  // Use authenticated user ID or a guest placeholder (1)
+  let developerId = 1;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
+      if (decoded && decoded.id) developerId = decoded.id;
+    } catch (e) {
+      console.warn('Playground token verify failed:', e);
+    }
+  }
 
   const aiResult = await reviewCode(code, language, rules);
 
@@ -39,10 +51,10 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
          score_overall, score_correctness, score_readability,
          score_security, score_performance, score_maintainability,
          summary, model_used, expires_at)
-       VALUES (?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, 'claude-sonnet-4-20250514',
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'claude-sonnet-4-20250514',
                DATE_ADD(NOW(), INTERVAL 7 DAY))`,
       [
-        developerId, language,
+        developerId, developerId === 1 ? true : false, language,
         aiResult.scores.overall, aiResult.scores.correctness,
         aiResult.scores.readability, aiResult.scores.security,
         aiResult.scores.performance, aiResult.scores.maintainability,
@@ -86,11 +98,20 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
 
     await conn.commit();
 
+    // Update user's daily streak
+    updateStreak(developerId).catch(console.error);
+
     res.status(200).json({
-      review_id: reviewId,
-      scores: aiResult.scores,
-      summary: aiResult.summary,
-      comments: aiResult.comments,
+      review_id:       reviewId,
+      scores:          aiResult.scores,
+      summary:         aiResult.summary,
+      grade:           aiResult.grade,
+      risk_level:      aiResult.risk_level,
+      strengths:       aiResult.strengths       || [],
+      critical_issues: aiResult.critical_issues || [],
+      improvements:    aiResult.improvements    || [],
+      comments:        aiResult.comments,
+      metrics:         aiResult.metrics         || {},
     });
   } catch (err) {
     await conn.rollback();

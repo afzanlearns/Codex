@@ -20,6 +20,20 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
   }
 }
 
+export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; role: string };
+      req.user = decoded;
+    } catch {
+      // Ignore invalid tokens for optional auth
+    }
+  }
+  next();
+}
+
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -32,6 +46,6 @@ export function requireRole(...roles: string[]) {
 
 export function generateToken(payload: { id: number; email: string; role: string }): string {
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    expiresIn: (process.env.JWT_EXPIRES_IN || '24h') as any,
   });
 }

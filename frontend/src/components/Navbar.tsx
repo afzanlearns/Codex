@@ -4,174 +4,150 @@ import { useAuth } from '../hooks/useAuth';
 
 const NAV_LINKS = [
   { label: 'Playground', href: '/playground' },
-  { label: 'Dashboard',  href: '/dashboard' },
-  { label: 'Leaderboard', href: '/leaderboard' },
+  { label: 'PRs',        href: '/prs'        },
+  { label: 'Repos',      href: '/repos'      },
+  { label: 'History',    href: '/history'    },
+  { label: 'Dashboard',  href: '/dashboard'  },
+  { label: 'Leaderboard',href: '/leaderboard'},
 ];
 
 export default function Navbar() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled]  = useState(false);
+  const [menuOpen, setMenuOpen]     = useState(false);
+  const [scrolled, setScrolled]     = useState(false);
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
+    const h = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', h, { passive: true });
+    return () => window.removeEventListener('scroll', h);
   }, []);
-
-  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => setMenuOpen(false), [location.pathname]);
 
   return (
     <>
-      {/* Floating pill nav */}
-      <nav
-        className="fixed top-6 left-1/2 z-40 -translate-x-1/2"
-        style={{
-          transition: 'all 0.5s cubic-bezier(0.32,0.72,0,1)',
-        }}
-      >
-        <div
-          className="glass-pill rounded-full flex items-center gap-1 px-2 py-2"
-          style={{
-            boxShadow: scrolled
-              ? '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)'
-              : 'inset 0 1px 0 rgba(255,255,255,0.08)',
-          }}
-        >
+      <nav style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+        background: scrolled ? 'rgba(12,12,12,0.97)' : 'var(--bg)',
+        borderBottom: '1px solid var(--border)',
+        transition: 'background 0.2s',
+      }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 1.5rem', display: 'flex', alignItems: 'center', height: '52px', gap: '2rem' }}>
+
           {/* Logo */}
-          <Link
-            to="/"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full
-                       transition-all duration-300 hover:bg-white/[0.06]"
-          >
-            <span className="text-sm font-semibold tracking-tight text-white">
-              cod<span className="text-violet-400">ex</span>
+          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+            <span style={{ width: '8px', height: '8px', background: 'var(--red)', display: 'inline-block' }} />
+            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-1)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              CODEX
             </span>
           </Link>
 
-          {/* Divider */}
-          <span className="w-px h-4 bg-white/10 mx-1" />
+          {/* Vertical divider */}
+          <span style={{ width: '1px', height: '20px', background: 'var(--border)', flexShrink: 0 }} />
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-0.5">
-            {NAV_LINKS.map(link => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className={`px-3.5 py-1.5 rounded-full text-sm transition-all duration-300
-                  ${location.pathname === link.href
-                    ? 'bg-white/[0.08] text-white'
-                    : 'text-white/50 hover:text-white hover:bg-white/[0.05]'
-                  }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0', flex: 1 }}>
+            {NAV_LINKS.map(link => {
+              const active = location.pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  style={{
+                    padding: '0.375rem 0.875rem',
+                    fontSize: '0.6875rem',
+                    fontWeight: active ? 600 : 400,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: active ? 'var(--text-1)' : 'var(--text-3)',
+                    textDecoration: 'none',
+                    borderBottom: active ? '1px solid var(--red)' : '1px solid transparent',
+                    transition: 'color 0.15s, border-color 0.15s',
+                    lineHeight: '52px',
+                    marginBottom: '-1px',
+                  }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
 
-          {/* Auth actions */}
-          <div className="hidden md:flex items-center gap-1 ml-1">
+          {/* Auth */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
             {isAuthenticated ? (
-              <div className="flex items-center gap-2 pl-2">
-                <span className="text-xs text-white/40">{user?.name?.split(' ')[0]}</span>
+              <>
+                <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {user?.name?.split(' ')[0]}
+                </span>
                 <button
                   onClick={logout}
-                  className="px-3 py-1.5 rounded-full text-xs text-white/40
-                             hover:text-white/70 transition-colors duration-300"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'inherit' }}
                 >
                   Sign out
                 </button>
-              </div>
+              </>
             ) : (
               <>
-                <Link to="/login" className="btn-ghost !py-1.5 !px-3.5 !text-xs">
+                <Link to="/login" className="btn-ghost" style={{ padding: '0.375rem 0.875rem', fontSize: '0.6875rem' }}>
                   Sign in
                 </Link>
-                <Link to="/register" className="btn-primary !py-1.5 !px-3.5 !text-xs">
+                <Link to="/register" className="btn-primary" style={{ padding: '0.375rem 0.875rem', fontSize: '0.6875rem' }}>
                   Get started
-                  <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                    ↗
-                  </span>
                 </Link>
               </>
             )}
           </div>
 
-          {/* Hamburger — mobile */}
+          {/* Hamburger */}
           <button
-            className="md:hidden relative w-8 h-8 ml-1 flex items-center justify-center"
             onClick={() => setMenuOpen(o => !o)}
-            aria-label="Toggle menu"
+            style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', color: 'var(--text-2)' }}
+            className="mobile-hamburger"
           >
-            <span
-              className="absolute block w-4 h-px bg-white/70 transition-all duration-400"
-              style={{
-                transform: menuOpen ? 'rotate(45deg) translateY(0)' : 'translateY(-4px)',
-                transition: 'transform 0.4s cubic-bezier(0.32,0.72,0,1)',
-              }}
-            />
-            <span
-              className="absolute block w-4 h-px bg-white/70"
-              style={{
-                opacity: menuOpen ? 0 : 1,
-                transition: 'opacity 0.3s cubic-bezier(0.32,0.72,0,1)',
-              }}
-            />
-            <span
-              className="absolute block w-4 h-px bg-white/70 transition-all duration-400"
-              style={{
-                transform: menuOpen ? 'rotate(-45deg) translateY(0)' : 'translateY(4px)',
-                transition: 'transform 0.4s cubic-bezier(0.32,0.72,0,1)',
-              }}
-            />
+            {menuOpen ? '✕' : '≡'}
           </button>
         </div>
       </nav>
 
-      {/* Mobile fullscreen overlay */}
-      <div
-        className="fixed inset-0 z-30 md:hidden backdrop-blur-2xl bg-black/85 flex flex-col
-                   items-center justify-center gap-2"
-        style={{
-          opacity:          menuOpen ? 1 : 0,
-          pointerEvents:    menuOpen ? 'all' : 'none',
-          transition:       'opacity 0.4s cubic-bezier(0.32,0.72,0,1)',
-        }}
-      >
-        {NAV_LINKS.map((link, i) => (
-          <Link
-            key={link.href}
-            to={link.href}
-            className="text-2xl font-medium text-white/80 hover:text-white py-3"
-            style={{
-              opacity:    menuOpen ? 1 : 0,
-              transform:  menuOpen ? 'translateY(0)' : 'translateY(16px)',
-              transition: `opacity 0.5s cubic-bezier(0.32,0.72,0,1) ${100 + i * 60}ms,
-                           transform 0.5s cubic-bezier(0.32,0.72,0,1) ${100 + i * 60}ms`,
-            }}
-          >
-            {link.label}
-          </Link>
-        ))}
-        <div
-          className="flex flex-col items-center gap-3 mt-6"
-          style={{
-            opacity:    menuOpen ? 1 : 0,
-            transform:  menuOpen ? 'translateY(0)' : 'translateY(16px)',
-            transition: 'opacity 0.5s cubic-bezier(0.32,0.72,0,1) 340ms, transform 0.5s cubic-bezier(0.32,0.72,0,1) 340ms',
-          }}
-        >
-          {isAuthenticated ? (
-            <button onClick={logout} className="btn-ghost">Sign out</button>
-          ) : (
-            <>
-              <Link to="/login"    className="btn-ghost">Sign in</Link>
-              <Link to="/register" className="btn-primary">Get started</Link>
-            </>
-          )}
+      {/* Mobile menu */}
+      {menuOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 40,
+          background: 'var(--bg)',
+          paddingTop: '52px',
+          display: 'flex', flexDirection: 'column',
+          borderTop: '1px solid var(--border)',
+        }}>
+          {NAV_LINKS.map(link => (
+            <Link
+              key={link.href}
+              to={link.href}
+              style={{
+                padding: '1rem 1.5rem',
+                borderBottom: '1px solid var(--border)',
+                color: location.pathname === link.href ? 'var(--text-1)' : 'var(--text-2)',
+                textDecoration: 'none',
+                fontSize: '0.875rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+              }}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <div style={{ padding: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+            {isAuthenticated ? (
+              <button onClick={logout} className="btn-ghost">Sign out</button>
+            ) : (
+              <>
+                <Link to="/login" className="btn-ghost">Sign in</Link>
+                <Link to="/register" className="btn-primary">Get started</Link>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

@@ -80,11 +80,24 @@ export async function getDeveloperAnalytics(req: Request, res: Response): Promis
     [id]
   );
 
+  // Average score breakdown (all time or recent)
+  const [breakdown] = await pool.execute<RowDataPacket[]>(
+    `SELECT AVG(score_correctness) as correctness,
+            AVG(score_security) as security,
+            AVG(score_readability) as readability,
+            AVG(score_performance) as performance,
+            AVG(score_maintainability) as maintainability
+     FROM reviews
+     WHERE developer_id = ? AND is_playground = FALSE`,
+    [id]
+  );
+
   res.json({
     trend: trend.reverse(), // chronological for chart
     sparkline: sparkline.reverse(),
     top_issues: topIssues,
     recent_reviews: recentReviews,
+    score_breakdown: breakdown[0] || null
   });
 }
 

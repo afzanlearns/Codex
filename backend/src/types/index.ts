@@ -53,6 +53,21 @@ export interface AIReviewResult {
     maintainability: number;
   };
   summary: string;
+  grade: string;
+  risk_level: string;
+  strengths: string[];
+  critical_issues: Array<{
+    title: string;
+    explanation: string;
+    fix: string;
+    impact: string;
+  }>;
+  improvements: Array<{
+    title: string;
+    explanation: string;
+    before: string;
+    after: string;
+  }>;
   comments: Array<{
     filename?: string;
     line_start?: number;
@@ -62,6 +77,13 @@ export interface AIReviewResult {
     severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
     categories: string[];
   }>;
+  metrics: {
+    estimated_complexity: string;
+    test_coverage_hint: string;
+    code_smell_count: number;
+    security_issue_count: number;
+    lines_analyzed: number;
+  };
 }
 
 export interface AuthRequest extends Express.Request {

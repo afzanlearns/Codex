@@ -6,6 +6,7 @@ import Playground from './pages/Playground';
 import Dashboard  from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
 import AuthPage   from './pages/AuthPage';
+import GitHubCallback from './pages/GitHubCallback';
 import { ReactNode } from 'react';
 
 function Protected({ children }: { children: ReactNode }) {
@@ -18,6 +19,11 @@ function Protected({ children }: { children: ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+import Repos   from './pages/Repos';
+import History from './pages/History';
+import PRs     from './pages/PRs';
+import PRDetail from './pages/PRDetail';
+
 function AppRoutes() {
   return (
     <>
@@ -27,8 +33,13 @@ function AppRoutes() {
         <Route path="/playground"  element={<Playground />} />
         <Route path="/login"       element={<AuthPage mode="login" />} />
         <Route path="/register"    element={<AuthPage mode="register" />} />
+        <Route path="/auth/callback" element={<GitHubCallback />} />
+        <Route path="/prs"         element={<Protected><PRs /></Protected>} />
+        <Route path="/prs/:id"     element={<Protected><PRDetail /></Protected>} />
         <Route path="/dashboard"   element={<Protected><Dashboard /></Protected>} />
         <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
+        <Route path="/repos"       element={<Repos />} />
+        <Route path="/history"     element={<Protected><History /></Protected>} />
         <Route path="*"            element={<Navigate to="/" replace />} />
       </Routes>
     </>

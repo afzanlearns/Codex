@@ -10,6 +10,9 @@ export interface User {
   role: 'developer' | 'lead' | 'admin';
   team_rank?: number;
   weekly_delta?: number;
+  score_goal?: number;
+  score_goal_deadline?: string;
+  score_breakdown?: ReviewScores;
 }
 
 export interface ReviewScores {
@@ -36,7 +39,29 @@ export interface Review {
   review_id: number;
   scores: ReviewScores;
   summary: string;
+  grade: string;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  strengths: string[];
+  critical_issues: Array<{
+    title: string;
+    explanation: string;
+    fix: string;
+    impact: string;
+  }>;
+  improvements: Array<{
+    title: string;
+    explanation: string;
+    before: string;
+    after: string;
+  }>;
   comments: ReviewComment[];
+  metrics: {
+    estimated_complexity: string;
+    test_coverage_hint: string;
+    code_smell_count: number;
+    security_issue_count: number;
+    lines_analyzed: number;
+  };
 }
 
 export interface DeveloperTrend {
@@ -64,6 +89,13 @@ export interface DeveloperAnalytics {
   sparkline: { score: number; recorded_at: string }[];
   top_issues: TopIssue[];
   recent_reviews: RecentReview[];
+  score_breakdown: {
+    correctness: number;
+    security: number;
+    readability: number;
+    performance: number;
+    maintainability: number;
+  } | null;
 }
 
 export interface RecentReview {
