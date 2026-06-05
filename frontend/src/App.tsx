@@ -10,6 +10,7 @@ import Repos         from './pages/Repos';
 import Chat          from './pages/Chat';
 import Refactor      from './pages/Refactor';
 import IndexManager  from './pages/IndexManager';
+import { ThemeProvider } from './hooks/useTheme';
 import { ReactNode } from 'react';
 
 function Protected({ children }: { children: ReactNode }) {
@@ -33,13 +34,13 @@ function AppRoutes() {
         <Route path="/login"          element={<AuthPage mode="login" />} />
         <Route path="/register"       element={<AuthPage mode="register" />} />
         <Route path="/auth/callback"  element={<GitHubCallback />} />
-        <Route path="/repos"          element={<Repos />} />
+        <Route path="/repos"          element={<Protected><Repos /></Protected>} />
 
-        {/* Protected — RAG features */}
-        <Route path="/chat"           element={<Protected><Chat /></Protected>} />
-        <Route path="/refactor"       element={<Protected><Refactor /></Protected>} />
-        <Route path="/index-manager"  element={<Protected><IndexManager /></Protected>} />
-        <Route path="/dashboard"      element={<Protected><Dashboard /></Protected>} />
+        {/* Public — RAG features no longer require GitHub login */}
+        <Route path="/chat"           element={<Chat />} />
+        <Route path="/refactor"       element={<Refactor />} />
+        <Route path="/index-manager"  element={<IndexManager />} />
+        <Route path="/dashboard"      element={<Dashboard />} />
 
         {/* Catch-all */}
         <Route path="*"               element={<Navigate to="/" replace />} />
@@ -51,9 +52,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

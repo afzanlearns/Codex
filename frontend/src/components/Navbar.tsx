@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 
 const NAV_LINKS = [
   { label: 'Playground',     href: '/playground'     },
@@ -15,6 +16,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen]     = useState(false);
   const [scrolled, setScrolled]     = useState(false);
   const { isAuthenticated, user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
   useEffect(() => {
@@ -28,9 +30,10 @@ export default function Navbar() {
     <>
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-        background: scrolled ? 'rgba(12,12,12,0.97)' : 'var(--bg)',
+        background: scrolled ? 'var(--bg-1)' : 'var(--bg)',
         borderBottom: '1px solid var(--border)',
-        transition: 'background 0.2s',
+        transition: 'background 0.2s, box-shadow 0.2s',
+        boxShadow: scrolled ? '0 8px 24px rgba(0,0,0,0.08)' : 'none',
       }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 1.5rem', display: 'flex', alignItems: 'center', height: '52px', gap: '2rem' }}>
 
@@ -75,6 +78,25 @@ export default function Navbar() {
 
           {/* Auth */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+            <button
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.375rem 0.875rem',
+                background: 'transparent',
+                border: '1px solid var(--border-2)',
+                color: 'var(--text-2)',
+                fontSize: '0.6875rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', lineHeight: 1 }}>{theme === 'dark' ? '☼' : '☾'}</span>
+              {theme === 'dark' ? 'Light' : 'Dark'}
+            </button>
             {isAuthenticated ? (
               <>
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -137,6 +159,9 @@ export default function Navbar() {
             </Link>
           ))}
           <div style={{ padding: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+            <button onClick={toggleTheme} className="btn-ghost">
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
             {isAuthenticated ? (
               <button onClick={logout} className="btn-ghost">Sign out</button>
             ) : (

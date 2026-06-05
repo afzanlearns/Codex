@@ -50,7 +50,7 @@ function ChartTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
-      background: 'var(--bg)', border: '1px solid rgba(255,255,255,0.1)',
+      background: 'var(--bg-1)', border: '1px solid var(--border)',
       borderRadius: 0, padding: '0.625rem 0.875rem', fontSize: '12px',
     }}>
       <p style={{ color: 'var(--text-2)', margin: '0 0 0.375rem', fontSize: '11px' }}>{label}</p>
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
   // Divider
   const Divider = () => (
-    <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)', margin: '0' }} />
+    <div style={{ height: '1px', background: 'var(--border)', margin: '0' }} />
   );
 
   // Section label
@@ -136,14 +136,14 @@ export default function Dashboard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 0.4rem' }}>Dashboard</p>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#fff', margin: 0, letterSpacing: '-0.025em' }}>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-1)', margin: 0, letterSpacing: '-0.025em' }}>
               {user?.name?.split(' ')[0] ?? 'Developer'}
             </h1>
           </div>
           <Link to="/playground" style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
             padding: '0.6rem 1.25rem', background: 'var(--red)', borderRadius: 0,
-            color: '#fff', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none',
+            color: 'var(--text-on-accent)', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none',
             transition: 'background 0.2s',
           }}>
             New review
@@ -158,8 +158,8 @@ export default function Dashboard() {
 
           {/* Score ring card */}
           <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'var(--bg-1)',
+            border: '1px solid var(--border)',
             borderRadius: 0, padding: '1.75rem 1.5rem',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
           }}>
@@ -217,8 +217,8 @@ export default function Dashboard() {
 
           {/* Score breakdown — Redesigned High-End List */}
           <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.07)',
+            background: 'var(--bg-1)',
+            border: '1px solid var(--border)',
             borderRadius: 0, padding: '1.75rem 2rem',
           }}>
             <Label>Dimension Analysis</Label>
@@ -236,7 +236,7 @@ export default function Dashboard() {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
                         <div>
-                          <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#fff', letterSpacing: '0.01em' }}>
+                          <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-1)', letterSpacing: '0.01em' }}>
                             {dim.label}
                           </p>
                           <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--text-3)' }}>
@@ -250,7 +250,7 @@ export default function Dashboard() {
                           {dimScore.toFixed(1)}
                         </span>
                       </div>
-                      <div style={{ height: '1px', background: 'rgba(255,255,255,0.03)', marginTop: '0.5rem' }} />
+                      <div style={{ height: '1px', background: 'var(--border)', marginTop: '0.5rem' }} />
                     </div>
                   </div>
                 );
@@ -287,13 +287,13 @@ export default function Dashboard() {
               },
             ].map(stat => (
               <div key={stat.label} style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.07)',
+                background: 'var(--bg-1)',
+                border: '1px solid var(--border)',
                 borderRadius: 0, padding: '0.875rem 1rem',
                 flex: 1,
               }}>
                 <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.25rem' }}>{stat.label}</p>
-                <p style={{ fontSize: '1.375rem', fontWeight: 700, color: stat.color ?? '#fff', margin: '0 0 0.125rem', "fontFamily": "'Geist Mono', monospace", lineHeight: 1 }}>{loading ? '—' : stat.value}</p>
+                <p style={{ fontSize: '1.375rem', fontWeight: 700, color: stat.color ?? 'var(--text-1)', margin: '0 0 0.125rem', "fontFamily": "'Geist Mono', monospace", lineHeight: 1 }}>{loading ? '—' : stat.value}</p>
                 <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', margin: 0 }}>{stat.sub}</p>
               </div>
             ))}
@@ -304,7 +304,7 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1rem', marginBottom: '1rem' }}>
 
           {/* Trend chart */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <Label>8-week score trend</Label>
@@ -360,12 +360,12 @@ export default function Dashboard() {
           </div>
 
           {/* Top issues */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '1.5rem' }}>
             <Label>Top issues (90 days)</Label>
             {loading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} style={{ height: '2rem', borderRadius: 0, background: 'var(--bg-1)' }} />
+                  <div key={i} style={{ height: '2rem', borderRadius: 0, background: 'var(--bg-2)' }} />
                 ))}
               </div>
             ) : analytics?.top_issues?.length ? (
@@ -405,7 +405,7 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '1rem', marginBottom: '1rem' }}>
 
           {/* Score goal card */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <Label>Score goal</Label>
               <button
@@ -421,20 +421,20 @@ export default function Dashboard() {
                 <input
                   type="number" placeholder="Target (e.g. 8.0)" min="1" max="10" step="0.5"
                   value={goalInput} onChange={e => setGoalInput(e.target.value)}
-                  style={{ padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 0, color: '#fff', fontSize: '0.8rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                  style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-2)', border: '1px solid var(--border-2)', borderRadius: 0, color: 'var(--text-1)', fontSize: '0.8rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
                 />
                 <input
                   type="date" value={goalDate} onChange={e => setGoalDate(e.target.value)}
-                  style={{ padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 0, color: '#fff', fontSize: '0.8rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                  style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-2)', border: '1px solid var(--border-2)', borderRadius: 0, color: 'var(--text-1)', fontSize: '0.8rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
                 />
-                <button onClick={saveGoal} style={{ padding: '0.5rem', background: 'var(--red)', border: 'none', borderRadius: 0, color: '#fff', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500 }}>
+                <button onClick={saveGoal} style={{ padding: '0.5rem', background: 'var(--red)', border: 'none', borderRadius: 0, color: 'var(--text-on-accent)', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500 }}>
                   Save goal
                 </button>
               </div>
             ) : scoreGoal ? (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '2rem', fontWeight: 700, color: '#fff', "fontFamily": "'Geist Mono', monospace", lineHeight: 1 }}>{score.toFixed(1)}</span>
+                  <span style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-1)', "fontFamily": "'Geist Mono', monospace", lineHeight: 1 }}>{score.toFixed(1)}</span>
                   <span style={{ fontSize: '1rem', color: 'var(--text-2)', "fontFamily": "'Geist Mono', monospace" }}>/ {scoreGoal}</span>
                 </div>
                 <div style={{ height: '6px', borderRadius: 0, background: 'var(--bg-2)', marginBottom: '0.75rem', overflow: 'hidden' }}>
@@ -446,7 +446,7 @@ export default function Dashboard() {
                   }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-                  <span style={{ color: goalProgress >= 100 ? '#10b981' : 'rgba(255,255,255,0.35)' }}>
+                  <span style={{ color: goalProgress >= 100 ? '#10b981' : 'var(--text-3)' }}>
                     {goalProgress >= 100 ? 'Goal reached' : `${(scoreGoal - score).toFixed(1)} to go`}
                   </span>
                   {goalDeadline && (
@@ -459,7 +459,7 @@ export default function Dashboard() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', gap: '0.375rem' }}>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', margin: 0 }}>No goal set</p>
-                <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.12)', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
                   Set a target score to track your progress over time
                 </p>
               </div>
@@ -467,7 +467,7 @@ export default function Dashboard() {
           </div>
 
           {/* Leaderboard preview */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <Label>Team leaderboard</Label>
               <Link to="/leaderboard" style={{ fontSize: '0.72rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
@@ -479,7 +479,7 @@ export default function Dashboard() {
             {leaderboard.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '120px', gap: '0.375rem' }}>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', margin: 0 }}>No team members yet</p>
-                <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.12)', margin: 0 }}>Register more users to populate the leaderboard</p>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', margin: 0 }}>Register more users to populate the leaderboard</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -516,7 +516,7 @@ export default function Dashboard() {
                       }}>
                         {dev.name.charAt(0).toUpperCase()}
                       </div>
-                      <span style={{ fontSize: '0.8125rem', color: isMe ? '#fff' : 'var(--text-2)', fontWeight: isMe ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '0.8125rem', color: isMe ? 'var(--text-1)' : 'var(--text-2)', fontWeight: isMe ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {dev.name}{isMe && <span style={{ marginLeft: '0.375rem', fontSize: '0.65rem', color: 'var(--red)' }}>you</span>}
                       </span>
                       <span style={{ fontSize: '0.72rem', "fontFamily": "'Geist Mono', monospace", color: delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : 'var(--text-3)' }}>
@@ -535,7 +535,7 @@ export default function Dashboard() {
 
         {/* ── Row 4: Recent reviews ── */}
         {analytics?.recent_reviews && analytics.recent_reviews.length > 0 && (
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <Label>Recent reviews</Label>
               <Link to="/history" style={{ fontSize: '0.72rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
@@ -555,7 +555,7 @@ export default function Dashboard() {
                       gap: '0.875rem', alignItems: 'center',
                       padding: '0.75rem 0',
                       borderBottom: i < Math.min(analytics.recent_reviews.length, 4) - 1
-                        ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                        ? '1px solid var(--border)' : 'none',
                     }}
                   >
                     <div style={{

@@ -75,23 +75,21 @@ export default function Landing() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100dvh', paddingTop: '52px' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingTop: '52px' }}>
 
       {/* ── HERO ──────────────────────────────────────────────── */}
       <section style={{
-        maxWidth: '1400px', margin: '0 auto', padding: '6rem 1.5rem 5rem',
+        maxWidth: '1400px', margin: '0 auto', padding: '4rem 1.5rem',
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4rem', alignItems: 'center',
         borderBottom: '1px solid var(--border)',
         position: 'relative',
+        minHeight: 'calc(100vh - 52px)'
       }}>
         {/* Corner marks */}
         <div style={{ position: 'absolute', top: '2rem', left: '1.5rem', width: '16px', height: '16px', borderTop: '1px solid var(--text-3)', borderLeft: '1px solid var(--text-3)' }} />
         <div style={{ position: 'absolute', top: '2rem', right: '1.5rem', width: '16px', height: '16px', borderTop: '1px solid var(--text-3)', borderRight: '1px solid var(--text-3)' }} />
 
         <div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <span className="tag">AI Code Intelligence · RAG-Powered</span>
-          </div>
           <h1 className="display" style={{ marginBottom: '1.5rem' }}>
             Code reviews.<br />
             <span style={{ color: 'var(--red)' }}>Grounded</span> in<br />
@@ -107,7 +105,7 @@ export default function Landing() {
               Try playground
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '0.4rem' }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
-            <Link to={isAuthenticated ? "/chat" : "/register"} className="btn-ghost" id="hero-cta">
+            <Link to={isAuthenticated ? "/chat" : "/register"} className="btn-ghost" id="hero-cta" style={{ color: 'var(--text-1)' }}>
               {isAuthenticated ? 'Chat with codebase' : 'Get started'}
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '0.2rem' }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
@@ -352,7 +350,6 @@ export default function Landing() {
                 <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>CODEX</span>
               </div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '0.5rem' }}>RAG-powered code intelligence grounded in your actual codebase.</p>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>DBMS Mini Project · MySQL 8.0 + ChromaDB</p>
             </div>
             <div>
               <p className="label" style={{ marginBottom: '1rem' }}>Product</p>
@@ -370,8 +367,8 @@ export default function Landing() {
             </div>
           </div>
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>© 2026 Codex · DBMS Mini Project</p>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>MySQL · ChromaDB · Groq · React</p>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Made with {'<3'} by team Imperial X</p>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>© 2026 Codex</p>
           </div>
         </div>
       </footer>
