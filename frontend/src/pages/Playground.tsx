@@ -228,9 +228,11 @@ export default function Playground() {
 
         {/* Header */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.15em', margin: '0 0 0.4rem' }}>Playground</p>
+          <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Playground</p>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>No account needed · Powered by Llama 3.3 70B · Results stored in MySQL</p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>
+            No account needed · Llama 3.3 70B · OWASP-grounded security · Results stored in MySQL
+          </p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'stretch' }}>
@@ -658,27 +660,82 @@ export default function Playground() {
 
                 {/* ── Tab: Details ── */}
                 {activeTab === 'details' && (
-                  <Card>
-                    <SectionLabel>Full summary</SectionLabel>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', lineHeight: 1.7, margin: '0 0 1.25rem' }}>{review.summary}</p>
-                    <SectionLabel>Analysis metadata</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {[
-                        { label: 'Lines analyzed',      value: review.metrics?.lines_analyzed ?? '—' },
-                        { label: 'Complexity',          value: review.metrics?.estimated_complexity ?? '—' },
-                        { label: 'Test coverage hint',  value: review.metrics?.test_coverage_hint ?? '—' },
-                        { label: 'Code smell count',    value: review.metrics?.code_smell_count ?? 0 },
-                        { label: 'Security issues',     value: review.metrics?.security_issue_count ?? 0 },
-                        { label: 'Language',            value: language },
-                        { label: 'Model',               value: 'Llama 3.3 70B (Groq)' },
-                      ].map(row => (
-                        <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>{row.label}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-2)', "fontFamily": "'Geist Mono', monospace" }}>{String(row.value)}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <Card>
+                      <SectionLabel>Full summary</SectionLabel>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', lineHeight: 1.7, margin: '0 0 1.25rem' }}>{review.summary}</p>
+                      <SectionLabel>Analysis metadata</SectionLabel>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {[
+                          { label: 'Lines analyzed',      value: review.metrics?.lines_analyzed ?? '—' },
+                          { label: 'Complexity',          value: review.metrics?.estimated_complexity ?? '—' },
+                          { label: 'Test coverage hint',  value: review.metrics?.test_coverage_hint ?? '—' },
+                          { label: 'Code smell count',    value: review.metrics?.code_smell_count ?? 0 },
+                          { label: 'Security issues',     value: review.metrics?.security_issue_count ?? 0 },
+                          { label: 'Language',            value: language },
+                          { label: 'Model',               value: 'Llama 3.3 70B (Groq)' },
+                        ].map(row => (
+                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>{row.label}</span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-2)', "fontFamily": "'Geist Mono', monospace" }}>{String(row.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+
+                    {/* RAG context panel — shown when review was grounded */}
+                    {review.rag_context && (
+                      <Card style={{ border: '1px solid var(--red-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <span style={{ width: '6px', height: '6px', background: 'var(--red)', display: 'inline-block' }} />
+                          <SectionLabel>RAG grounding</SectionLabel>
                         </div>
-                      ))}
-                    </div>
-                  </Card>
+                        {/* Metrics row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
+                          {[
+                            { label: 'Chunks retrieved', value: review.rag_context.chunksRetrieved },
+                            { label: 'Retrieval latency', value: `${review.rag_context.ragLatencyMs}ms` },
+                            { label: 'LLM latency', value: `${review.rag_context.llmLatencyMs}ms` },
+                          ].map(m => (
+                            <div key={m.label} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', padding: '0.625rem', textAlign: 'center' }}>
+                              <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--red)', margin: '0 0 0.2rem', letterSpacing: '-0.01em' }}>{m.value}</p>
+                              <p style={{ fontSize: '0.55rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>{m.label}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Citation map */}
+                        {review.citation_map && Object.keys(review.citation_map).length > 0 && (
+                          <>
+                            <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.625rem' }}>
+                              Retrieved context sources
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              {Object.entries(review.citation_map).map(([citId, src]) => (
+                                <div key={citId} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.625rem', background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+                                  <span style={{
+                                    fontSize: '0.55rem', fontWeight: 700, color: 'var(--red)',
+                                    background: 'var(--red-dim)', border: '1px solid var(--red-border)',
+                                    padding: '0.15rem 0.4rem', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.08em',
+                                  }}>
+                                    {citId}
+                                  </span>
+                                  <div style={{ minWidth: 0 }}>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-1)', margin: '0 0 0.125rem', fontFamily: "'Geist Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {src.filePath}
+                                    </p>
+                                    <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                      Lines {src.startLine}–{src.endLine} · {src.corpusName === 'owasp_top10' ? 'OWASP Corpus' : src.corpusName}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </Card>
+                    )}
+                  </div>
                 )}
               </>
             )}

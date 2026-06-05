@@ -5,41 +5,69 @@ import { useAuth } from '../hooks/useAuth';
 const FAQS = [
   {
     q: 'Do I need a GitHub account to use Codex?',
-    a: 'No. The playground works instantly — paste any code and get a full AI review in seconds. GitHub integration is optional and only needed for automatic PR reviews and repo analysis.',
+    a: 'No. The playground works instantly — paste any code and get a full AI-grounded review in seconds. GitHub integration is optional and enables repository indexing, codebase chat, and refactor intelligence.',
   },
   {
     q: 'What languages are supported?',
     a: 'JavaScript, TypeScript, Python, Java, Go, Rust, C++, SQL, PHP, Ruby, Swift, and Kotlin. The AI understands language-specific patterns and best practices for each.',
   },
   {
-    q: 'How is the score calculated?',
-    a: 'Overall = Correctness (30%) + Security (25%) + Readability (20%) + Performance (15%) + Maintainability (10%). This weighted formula runs inside a MySQL stored procedure, not application code.',
+    q: 'How does RAG grounding work?',
+    a: 'When you run a review or refactor analysis, Codex retrieves the most relevant code chunks from your indexed repository using hybrid BM25 + semantic search (Reciprocal Rank Fusion). These chunks are injected as context into the Llama 3.3 70B prompt, grounding answers in your actual codebase instead of generic patterns.',
   },
   {
-    q: 'What MySQL features does Codex actually use?',
-    a: '15 normalized tables, 5 stored procedures, 3 triggers, 4 views with RANK() and LAG() window functions, 3 scheduled events, full-text search indexes, CTEs, and recursive queries.',
+    q: 'How is the review score calculated?',
+    a: 'Overall = Correctness (30%) + Security (25%) + Readability (20%) + Performance (15%) + Maintainability (10%). The scoring formula runs as a MySQL stored procedure so weights remain consistent across all reviews.',
   },
   {
-    q: 'Is my code stored permanently?',
-    a: 'Playground reviews expire after 7 days and are automatically deleted by a MySQL Event Scheduler job that runs at 3am daily. Authenticated reviews are stored indefinitely.',
+    q: 'How does the codebase indexing pipeline work?',
+    a: 'Codex fetches your GitHub repo via Octokit, splits source files into overlapping chunks by function/class boundaries, generates 384-dimensional embeddings using all-MiniLM-L6-v2, and upserts them into ChromaDB. The entire pipeline runs embedded — no Docker, no separate service.',
   },
   {
-    q: 'How does the leaderboard work?',
-    a: 'Rankings are computed by a MySQL view using RANK() OVER (PARTITION BY team_id ORDER BY current_score DESC). The LAG() function calculates week-over-week rank changes. No application code involved.',
+    q: 'What is the OWASP corpus?',
+    a: 'A curated set of OWASP Top 10 vulnerability descriptions and patterns that are pre-seeded into ChromaDB. Every code review retrieves semantically similar OWASP entries to ground security findings in documented vulnerability classes.',
   },
   {
     q: 'What AI model powers the reviews?',
-    a: 'Llama 3.3 70B running on Groq infrastructure — selected for code comprehension depth and sub-second response times.',
+    a: 'Llama 3.3 70B running on Groq infrastructure — selected for deep code comprehension and sub-second token generation. RAG context blocks are injected into every prompt with full citation tracking.',
+  },
+  {
+    q: 'Is my code stored permanently?',
+    a: 'Playground reviews expire after 7 days and are cleaned up automatically by a MySQL Event Scheduler job. Repository vector indexes persist in ChromaDB until you manually delete them from the Index Manager.',
   },
 ];
 
 const FEATURES = [
-  { label: 'AI Deep Reviews', desc: 'Security, bugs, performance, readability — all scored with grade A–F. Before/after fix comparisons included.', tag: 'LLM' },
-  { label: '15-Table Schema', desc: 'Normalized to 5NF. Foreign keys, indexes, and constraints enforce data integrity at the database level.', tag: 'MySQL' },
-  { label: 'Stored Procedures', desc: 'calculate_developer_score(), generate_weekly_snapshot(), flag_repeat_offender() — logic lives in the DB.', tag: 'MySQL' },
-  { label: 'Triggers & Events', desc: '3 triggers auto-update scores on INSERT. 3 scheduled events run snapshots, alerts, and cleanup autonomously.', tag: 'MySQL' },
-  { label: 'Window Functions', desc: 'RANK() OVER, LAG(), rolling AVG() — leaderboard and trend data are pure MySQL, not application code.', tag: 'MySQL' },
-  { label: 'Repo Analysis', desc: 'Connect GitHub, analyze any codebase. Architecture breakdown, folder explanations, language distribution.', tag: 'GitHub' },
+  {
+    label: 'Codebase Chat',
+    desc: 'Ask anything about your indexed repo — architecture, entry points, API surface, test coverage. Every answer is grounded in retrieved code chunks with cited file and line references.',
+    tag: 'RAG',
+  },
+  {
+    label: 'Refactor Intelligence',
+    desc: 'Paste a snippet and get RAG-grounded refactoring suggestions backed by patterns from your actual codebase — not generic advice. Before/after diffs with impact ratings included.',
+    tag: 'RAG',
+  },
+  {
+    label: 'Hybrid Search',
+    desc: 'BM25 keyword search fused with semantic vector search via Reciprocal Rank Fusion. Retrieves the most relevant context chunks regardless of whether you match exact tokens or semantic meaning.',
+    tag: 'Search',
+  },
+  {
+    label: 'OWASP-Grounded Security',
+    desc: 'Every code review retrieves semantically similar OWASP Top 10 entries from ChromaDB. Security findings are cited back to documented vulnerability classes — not hallucinated.',
+    tag: 'Security',
+  },
+  {
+    label: 'Index Pipeline',
+    desc: 'Parse → Chunk → Embed → Store. Live progress visualization for every stage. ChromaDB runs embedded — no Docker, no separate Python service. Everything from npm run dev.',
+    tag: 'Pipeline',
+  },
+  {
+    label: 'AI Deep Reviews',
+    desc: 'Correctness, Security, Readability, Performance, Maintainability — all scored A–F. Grounded in retrieved codebase context and OWASP patterns. Before/after fix comparisons included.',
+    tag: 'LLM',
+  },
 ];
 
 export default function Landing() {
@@ -62,25 +90,25 @@ export default function Landing() {
 
         <div>
           <div style={{ marginBottom: '1.5rem' }}>
-            <span className="tag">DBMS Mini Project — AI SaaS</span>
+            <span className="tag">AI Code Intelligence · RAG-Powered</span>
           </div>
           <h1 className="display" style={{ marginBottom: '1.5rem' }}>
             Code reviews.<br />
-            <span style={{ color: 'var(--red)' }}>MySQL</span> is<br />
-            the engine.
+            <span style={{ color: 'var(--red)' }}>Grounded</span> in<br />
+            your codebase.
           </h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', lineHeight: '1.8', maxWidth: '420px', marginBottom: '2.5rem' }}>
-            Codex reviews pull requests, scores developers over time, and surfaces
-            team-wide insights — entirely driven by stored procedures, triggers,
-            and window functions.
+            Codex indexes your repositories into ChromaDB, retrieves relevant context
+            via hybrid search, and grounds every review, refactor suggestion,
+            and chat answer in your actual code — not generic patterns.
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Link to="/playground" className="btn-primary">
               Try playground
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '0.4rem' }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
-            <Link to={isAuthenticated ? "/dashboard" : "/register"} className="btn-ghost" id="hero-cta">
-              {isAuthenticated ? 'Go to Dashboard' : 'Get started'}
+            <Link to={isAuthenticated ? "/chat" : "/register"} className="btn-ghost" id="hero-cta">
+              {isAuthenticated ? 'Chat with codebase' : 'Get started'}
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '0.2rem' }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
           </div>
@@ -89,10 +117,10 @@ export default function Landing() {
         {/* Right — stat grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid var(--border)' }}>
           {[
-            { value: '< 5s',  label: 'Time to review',     sub: 'Playground mode' },
-            { value: '15+',   label: 'DB tables',           sub: 'Normalized 5NF'  },
-            { value: '5',     label: 'Stored procedures',   sub: 'MySQL logic'     },
-            { value: '3',     label: 'Triggers',            sub: 'Auto-update'     },
+            { value: '< 5s',  label: 'Time to review',   sub: 'Playground mode' },
+            { value: 'BM25+', label: 'Hybrid search',     sub: 'RRF fusion'      },
+            { value: '384d',  label: 'Embedding dims',    sub: 'all-MiniLM-L6'   },
+            { value: 'OWASP', label: 'Security corpus',   sub: 'Top 10 grounded' },
           ].map((stat, i) => (
             <div key={stat.label} style={{
               padding: '2rem 1.5rem',
@@ -108,7 +136,7 @@ export default function Landing() {
           <div style={{ gridColumn: '1 / -1', padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border)', background: 'var(--bg-1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
               <span style={{ width: '6px', height: '6px', background: '#4ade80', display: 'inline-block' }} />
-              <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>live review · just now</span>
+              <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>live review · just now · 12 rag chunks</span>
             </div>
             {[
               { label: 'Correctness', score: 8.5, pct: 85 },
@@ -131,17 +159,18 @@ export default function Landing() {
       <section style={{ maxWidth: '1400px', margin: '0 auto', padding: '5rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
         <div style={{ marginBottom: '3rem' }}>
           <span className="label" style={{ display: 'block', marginBottom: '0.75rem' }}>// How it works</span>
-          <h2 className="heading">Three steps. One system.</h2>
+          <h2 className="heading">Index once. Ask anything.</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', border: '1px solid var(--border)' }}>
           {[
-            { num: '01', title: 'Paste your code', desc: 'Drop any snippet into the playground. No account needed, no GitHub connection. 12+ languages supported.' },
-            { num: '02', title: 'AI analyzes it',  desc: 'Llama 3.3 70B reviews for security vulnerabilities, logic bugs, performance issues, and code smells simultaneously.' },
-            { num: '03', title: 'MySQL stores everything', desc: 'Every review lands in a 15-table normalized schema. Triggers fire. Score updates. Leaderboard recalculates.' },
+            { num: '01', title: 'Index your repo',     desc: 'Connect GitHub, trigger the pipeline. Codex parses, chunks, and embeds your source files into ChromaDB in one pass.' },
+            { num: '02', title: 'Hybrid retrieval',    desc: 'Every query hits BM25 keyword search and semantic vector search in parallel. Results are fused with Reciprocal Rank Fusion.' },
+            { num: '03', title: 'LLM with context',    desc: 'The top-K retrieved chunks are injected into the Llama 3.3 70B prompt as grounding context with citation IDs.' },
+            { num: '04', title: 'Cited, traceable answers', desc: 'Every finding or suggestion is tagged with a citation ID mapping back to the exact file and line range it came from.' },
           ].map((step, i) => (
             <div key={step.num} style={{
               padding: '2.5rem 2rem',
-              borderRight: i < 2 ? '1px solid var(--border)' : 'none',
+              borderRight: i < 3 ? '1px solid var(--border)' : 'none',
             }}>
               <p style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--border-2)', marginBottom: '1.5rem', letterSpacing: '-0.03em' }}>{step.num}</p>
               <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: '0.75rem' }}>{step.title}</p>
@@ -161,13 +190,12 @@ export default function Landing() {
           {/* Code panel */}
           <div style={{ borderRight: '1px solid var(--border)' }}>
             <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="label">input.js</span>
+              <span className="label">input.ts</span>
             </div>
-            <pre style={{ padding: '1.5rem', fontSize: '0.75rem', lineHeight: '1.8', color: 'var(--text-2)', fontFamily: 'inherit', overflow: 'auto' }}>{`function getUser(id) {
-  const query = 
-    "SELECT * FROM users" +
-    " WHERE id = " + id;
-  return db.execute(query);
+            <pre style={{ padding: '1.5rem', fontSize: '0.75rem', lineHeight: '1.8', color: 'var(--text-2)', fontFamily: 'inherit', overflow: 'auto' }}>{`async function getUser(id) {
+  const q = "SELECT * FROM users"
+    + " WHERE id = " + id;
+  return db.execute(q);
 }`}</pre>
           </div>
           {/* Review panel */}
@@ -176,7 +204,7 @@ export default function Landing() {
               <span className="label">review output</span>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <span className="tag tag-red">Grade F</span>
-                <span className="tag tag-red">Critical Risk</span>
+                <span className="tag tag-red">3 RAG chunks</span>
               </div>
             </div>
             <div style={{ padding: '1.5rem' }}>
@@ -199,15 +227,18 @@ export default function Landing() {
                 </div>
               ))}
               <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'var(--red-dim)', border: '1px solid var(--red-border)' }}>
-                <p style={{ fontSize: '0.6875rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>Critical — SQL Injection</p>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.6' }}>Raw string concatenation in query builder. Attacker can inject arbitrary SQL.</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                  <p style={{ fontSize: '0.6875rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Critical — SQL Injection</p>
+                  <span className="tag tag-red" style={{ fontSize: '0.5rem' }}>OWASP A03:2021</span>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.6' }}>Raw string concatenation in query builder. Attacker can inject arbitrary SQL. Grounded in retrieved OWASP A03:2021 corpus entry.</p>
                 <p style={{ fontSize: '0.75rem', color: '#4ade80', marginTop: '0.5rem', fontFamily: 'inherit' }}>Fix: db.execute('SELECT * FROM users WHERE id = ?', [id])</p>
               </div>
             </div>
           </div>
         </div>
         <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-          <Link to="/playground" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Link to="/playground" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
             Try it yourself
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </Link>
@@ -218,8 +249,8 @@ export default function Landing() {
       <section style={{ maxWidth: '1400px', margin: '0 auto', padding: '5rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
         <div style={{ marginBottom: '3rem' }}>
           <span className="label" style={{ display: 'block', marginBottom: '0.75rem' }}>// What makes it different</span>
-          <h2 className="heading">The database is the engine.</h2>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', marginTop: '0.75rem' }}>Not just a storage layer — MySQL runs the business logic.</p>
+          <h2 className="heading">The codebase is the context.</h2>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', marginTop: '0.75rem' }}>Not generic AI advice — answers grounded in your actual code, retrieved at query time.</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid var(--border)' }}>
           {FEATURES.map((feat, i) => (
@@ -242,24 +273,20 @@ export default function Landing() {
       <section style={{ background: 'var(--bg-1)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '3rem 1.5rem', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0' }}>
           {[
-            { value: '15+', label: 'DB Tables' },
-            { value: '5',   label: 'Stored Procedures' },
-            { value: '3',   label: 'Triggers' },
-            { value: '4',   label: 'Scheduled Events' },
+            { value: '2',     label: 'Search modes',       sub: 'BM25 + Semantic' },
+            { value: '384',   label: 'Embedding dims',     sub: 'all-MiniLM-L6-v2' },
+            { value: 'RRF',   label: 'Fusion algorithm',   sub: 'Reciprocal Rank' },
+            { value: 'SSE',   label: 'Streaming protocol', sub: 'Chat responses' },
           ].map((stat, i) => (
             <div key={stat.label} style={{
               textAlign: 'center', padding: '1.5rem',
               borderRight: i < 3 ? '1px solid var(--border)' : 'none',
             }}>
-              <p style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--red)', marginBottom: '0.5rem', letterSpacing: '-0.03em' }}>{stat.value}</p>
-              <p className="label">{stat.label}</p>
+              <p style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--red)', marginBottom: '0.375rem', letterSpacing: '-0.03em' }}>{stat.value}</p>
+              <p className="label" style={{ marginBottom: '0.25rem' }}>{stat.label}</p>
+              <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{stat.sub}</p>
             </div>
           ))}
-        </div>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
-            Every number above is a live MySQL object you can query right now.
-          </p>
         </div>
       </section>
 
@@ -302,12 +329,15 @@ export default function Landing() {
       <section style={{ background: 'var(--red)', padding: '4rem 1.5rem', textAlign: 'center' }}>
         <p className="label" style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>// No setup required</p>
         <h2 style={{ fontSize: 'clamp(1.75rem, 4vw, 3rem)', fontWeight: 700, color: '#fff', marginBottom: '2rem', letterSpacing: '-0.02em' }}>
-          Paste code. Get a review.
+          Index once. Understand everything.
         </h2>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-          <Link to={isAuthenticated ? "/dashboard" : "/playground"} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {isAuthenticated ? "Go to Dashboard" : "Open playground"}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <Link to="/playground" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#fff', color: 'var(--red)', borderColor: '#fff' }}>
+            Open playground
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </Link>
+          <Link to={isAuthenticated ? "/chat" : "/register"} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s' }}>
+            {isAuthenticated ? 'Chat with codebase' : 'Get started'}
           </Link>
         </div>
       </section>
@@ -321,12 +351,12 @@ export default function Landing() {
                 <span style={{ width: '8px', height: '8px', background: 'var(--red)', display: 'inline-block' }} />
                 <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>CODEX</span>
               </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '0.5rem' }}>AI code reviews powered by MySQL.</p>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Built as a DBMS Mini Project · MySQL 8.0</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '0.5rem' }}>RAG-powered code intelligence grounded in your actual codebase.</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>DBMS Mini Project · MySQL 8.0 + ChromaDB</p>
             </div>
             <div>
               <p className="label" style={{ marginBottom: '1rem' }}>Product</p>
-              {[['Playground', '/playground'], ['Dashboard', '/dashboard'], ['Leaderboard', '/leaderboard'], ['Sign in', '/login']].map(([label, href]) => (
+              {[['Playground', '/playground'], ['Codebase Chat', '/chat'], ['Refactor', '/refactor'], ['Index Manager', '/index-manager'], ['Dashboard', '/dashboard']].map(([label, href]) => (
                 <Link key={href} to={href} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-2)', textDecoration: 'none', marginBottom: '0.5rem', transition: 'color 0.15s' }}>
                   {label}
                 </Link>
@@ -334,14 +364,14 @@ export default function Landing() {
             </div>
             <div>
               <p className="label" style={{ marginBottom: '1rem' }}>Technology</p>
-              {['MySQL 8.0', 'Llama 3.3 70B (Groq)', 'React + TypeScript', 'Node.js + Express'].map(t => (
+              {['MySQL 8.0', 'ChromaDB (embedded)', 'Llama 3.3 70B (Groq)', 'all-MiniLM-L6-v2', 'React + TypeScript', 'Node.js + Express'].map(t => (
                 <p key={t} style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginBottom: '0.5rem' }}>{t}</p>
               ))}
             </div>
           </div>
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>© 2026 Codex · DBMS Mini Project</p>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Built with MySQL · React · Groq</p>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>MySQL · ChromaDB · Groq · React</p>
           </div>
         </div>
       </footer>

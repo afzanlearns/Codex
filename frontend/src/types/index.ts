@@ -35,6 +35,21 @@ export interface ReviewComment {
   categories: string[];
 }
 
+export interface CitationSource {
+  corpusName: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  displayLabel: string;
+}
+
+export interface RagContext {
+  chunksRetrieved: number;
+  ragLatencyMs: number;
+  llmLatencyMs: number;
+  repoId?: number;
+}
+
 export interface Review {
   review_id: number;
   scores: ReviewScores;
@@ -62,6 +77,8 @@ export interface Review {
     security_issue_count: number;
     lines_analyzed: number;
   };
+  rag_context?: RagContext | null;
+  citation_map?: Record<string, CitationSource> | null;
 }
 
 export interface DeveloperTrend {

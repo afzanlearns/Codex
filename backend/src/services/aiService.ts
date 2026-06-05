@@ -50,7 +50,8 @@ preamble, just the JSON object:
       "content": "<specific finding — reference actual variable names and patterns>",
       "suggestion": "<concrete actionable fix>",
       "severity": "<info|low|medium|high|critical>",
-      "categories": ["<one or more of: bug, security, performance, readability, smell, docs, style, test, complexity, type_safety>"]
+      "categories": ["<one or more of: bug, security, performance, readability, smell, docs, style, test, complexity, type_safety>"],
+      "citation_id": "<e.g. SOURCE_1 or SOURCE_2 — the source ID that grounded this finding, or null>"
     }
   ],
   "metrics": {
@@ -69,7 +70,7 @@ SCORING RULES:
 - strengths: always include at least 1, max 4
 - critical_issues: only include severity high or critical issues here
 - improvements: 2-4 actionable non-critical improvements
-- comments: every individual finding as a line-level comment
+- comments: every individual finding as a line-level comment. Set citation_id to the [SOURCE_N] id that most informed this finding.
 - Be brutally specific — reference exact variable names, line patterns, function names
 - Never give generic advice like "add error handling" — always show the exact fix`;
 
@@ -96,24 +97,78 @@ export interface EnhancedAIReviewResult extends AIReviewResult {
     security_issue_count: number;
     lines_analyzed: number;
   };
+  ragContext?: {
+    chunksRetrieved: number;
+    corpora: string[];
+    latencyMs: number;
+  };
+  citationMap?: Record<string, {
+    corpusName: string;
+    displayLabel: string;
+    excerptText: string;
+    filePath: string;
+    startLine: number;
+    endLine: number;
+  }>;
 }
 
 export async function reviewCode(
   code: string,
   language: string,
-  customRules: string[] = []
+  customRules: string[] = [],
+  repoId?: number,
+  userId?: number
 ): Promise<EnhancedAIReviewResult> {
+  const ragStartMs = Date.now();
+  let ragContext: EnhancedAIReviewResult['ragContext'] = { chunksRetrieved: 0, corpora: [], latencyMs: 0 };
+  let citationMap: EnhancedAIReviewResult['citationMap'] = {};
+  let contextBlock = '';
+
+  // 1. Retrieve RAG context
+  try {
+    const { retrievalService } = await import('./retrievalService');
+    const chunks = await retrievalService.retrieveForReview(code, language, repoId, userId);
+
+    if (chunks.length > 0) {
+      chunks.forEach((chunk, idx) => {
+        const sourceId = `SOURCE_${idx + 1}`;
+        contextBlock += `[${sourceId}] ${chunk.displayLabel}:\n${chunk.text.slice(0, 800)}\n\n`;
+        citationMap![sourceId] = {
+          corpusName: chunk.corpusName,
+          displayLabel: chunk.displayLabel,
+          excerptText: chunk.text.slice(0, 300),
+          filePath: chunk.filePath,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+        };
+      });
+
+      const uniqueCorpora = [...new Set(chunks.map(c => c.corpusName))];
+      ragContext = {
+        chunksRetrieved: chunks.length,
+        corpora: uniqueCorpora,
+        latencyMs: Date.now() - ragStartMs,
+      };
+    }
+  } catch (ragErr) {
+    console.warn('RAG retrieval failed, falling back to direct review:', (ragErr as Error).message);
+  }
+
   const rulesSection = customRules.length > 0
     ? `\n\nCUSTOM RULES (enforce these strictly):\n${customRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}`
     : '';
+
+  const systemPrompt = contextBlock
+    ? `${REVIEW_SYSTEM_PROMPT}\n\nBase EVERY finding on the retrieved context below. Set "citation_id" on each comment:\n\n--- RETRIEVED CONTEXT ---\n${contextBlock}--- END CONTEXT ---`
+    : REVIEW_SYSTEM_PROMPT;
 
   const userMessage = `Language: ${language}${rulesSection}\n\nCode to review:\n\`\`\`${language}\n${code}\n\`\`\``;
 
   const response = await client.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
-    max_tokens: 3000,
+    max_tokens: 3500,
     messages: [
-      { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user',   content: userMessage },
     ],
   });
@@ -121,14 +176,39 @@ export async function reviewCode(
   const rawText = response.choices[0]?.message?.content || '';
   const jsonText = rawText.replace(/```json\n?|\n?```/g, '').trim();
 
+  let parsed: EnhancedAIReviewResult;
   try {
-    return JSON.parse(jsonText) as EnhancedAIReviewResult;
+    parsed = JSON.parse(jsonText) as EnhancedAIReviewResult;
   } catch {
-    // Attempt to extract JSON from response if there's extra text
     const match = jsonText.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]) as EnhancedAIReviewResult;
-    throw new Error('Failed to parse AI response as JSON');
+    if (match) parsed = JSON.parse(match[0]) as EnhancedAIReviewResult;
+    else throw new Error('Failed to parse AI response as JSON');
   }
+
+  parsed.ragContext = ragContext;
+  parsed.citationMap = citationMap;
+
+  // 2. Save findings to review memory (async, non-blocking)
+  if (parsed.comments && parsed.comments.length > 0) {
+    setTimeout(async () => {
+      try {
+        const { ingestionService } = await import('./ingestionService');
+        for (const comment of parsed.comments.slice(0, 5)) {
+          await ingestionService.buildReviewMemoryEntry({
+            review_id: 0,
+            severity: comment.severity,
+            category: (comment.categories || ['general'])[0],
+            title: comment.content?.slice(0, 100) || 'Finding',
+            description: comment.content,
+            suggestion: comment.suggestion,
+            line_number: comment.line_start,
+          });
+        }
+      } catch (_) { /* Non-critical */ }
+    }, 100);
+  }
+
+  return parsed;
 }
 
 export async function generateWeeklyDigest(teamReport: Record<string, unknown>): Promise<string> {

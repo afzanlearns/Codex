@@ -3,12 +3,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV_LINKS = [
-  { label: 'Playground', href: '/playground' },
-  { label: 'PRs',        href: '/prs'        },
-  { label: 'Repos',      href: '/repos'      },
-  { label: 'History',    href: '/history'    },
-  { label: 'Dashboard',  href: '/dashboard'  },
-  { label: 'Leaderboard',href: '/leaderboard'},
+  { label: 'Playground',     href: '/playground'     },
+  { label: 'Chat',           href: '/chat'           },
+  { label: 'Refactor',       href: '/refactor'       },
+  { label: 'Index Manager',  href: '/index-manager'  },
+  { label: 'Repos',          href: '/repos'          },
+  { label: 'Dashboard',      href: '/dashboard'      },
 ];
 
 export default function Navbar() {

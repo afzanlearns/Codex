@@ -38,7 +38,7 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
     }
   }
 
-  const aiResult = await reviewCode(code, language, rules);
+  const aiResult = await reviewCode(code, language, rules, undefined, developerId === 1 ? undefined : developerId);
 
   const conn = await pool.getConnection();
   try {
@@ -51,7 +51,7 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
          score_overall, score_correctness, score_readability,
          score_security, score_performance, score_maintainability,
          summary, model_used, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'claude-sonnet-4-20250514',
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'llama-3.3-70b-versatile',
                DATE_ADD(NOW(), INTERVAL 7 DAY))`,
       [
         developerId, developerId === 1 ? true : false, language,
@@ -82,7 +82,7 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
       );
 
       // Insert comment categories
-      for (const categorySlug of comment.categories) {
+      for (const categorySlug of (comment.categories || [])) {
         const [taxonomy] = await conn.execute<RowDataPacket[]>(
           'SELECT id FROM issue_taxonomy WHERE slug = ?',
           [categorySlug]
@@ -112,6 +112,8 @@ export async function reviewPlayground(req: Request, res: Response): Promise<voi
       improvements:    aiResult.improvements    || [],
       comments:        aiResult.comments,
       metrics:         aiResult.metrics         || {},
+      rag_context:     aiResult.ragContext       || null,
+      citation_map:    aiResult.citationMap      || null,
     });
   } catch (err) {
     await conn.rollback();
