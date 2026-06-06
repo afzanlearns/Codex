@@ -318,21 +318,28 @@ SHOW TABLES;
 ChromaDB is required for the vector store. Run it as a separate process before starting the backend.
 
 ```bash
-# Install ChromaDB
-pip install chromadb
+# First-time only: install dependencies
+pip install chromadb opentelemetry-instrumentation-fastapi
 
-# Start ChromaDB (keep this terminal open)
-chroma run --path ./chroma_data --port 8000
+# Every session: start ChromaDB (keep this terminal open)
+python start_chroma.py
 ```
 
-Verify it is running:
+> **Why `start_chroma.py` instead of `chroma run`?**
+> The `chroma` CLI command requires its Scripts folder to be on your system PATH, which is often missing on Windows. `start_chroma.py` launches the server directly via Python and works on any OS without PATH changes.
+
+Verify it is running (in a second terminal):
 
 ```bash
+# PowerShell
+Invoke-WebRequest -Uri "http://localhost:8000/api/v1/heartbeat" -UseBasicParsing
+# Expected: StatusCode 200, Content: {"nanosecond heartbeat": ...}
+
+# bash / WSL
 curl http://localhost:8000/api/v1/heartbeat
-# Expected: {"nanosecond heartbeat": ...}
 ```
 
-> **Important:** ChromaDB must be running before you start the backend. The backend health check will exit with a clear error message if ChromaDB is unreachable.
+> **Important:** ChromaDB must be running before you start the backend. The backend `checkChromaDB()` pre-flight will exit with a clear error if ChromaDB is unreachable.
 
 ---
 
