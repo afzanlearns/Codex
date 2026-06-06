@@ -1,5 +1,7 @@
 import Groq from 'groq-sdk';
 import { AIReviewResult } from '../types/index';
+import { parseModelJson } from '../utils/jsonParse';
+import { parseCodebaseLocal } from '../utils/codebaseParser';
 
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -309,8 +311,18 @@ export async function analyzeCodebase(
       percentage: Math.round((bytes / totalLangBytes) * 100),
     }));
 
+  // Perform local AST/structural metadata parsing (Phase 1)
+  const phase1Metadata = parseCodebaseLocal(structure);
+
+  // Identify top 3 entry files by score
+  const topEntryFiles = phase1Metadata.files
+    .slice(0, 3)
+    .map(f => f.path);
+
+  // Extract contents of these top 3 entry files, limited to 1500 chars
   const sampledFilesContent = structure.sampled_files
-    .map(f => `\n${'='.repeat(60)}\nFILE: ${f.path} (${f.size} bytes)\n${'='.repeat(60)}\n${f.content}`)
+    .filter(f => topEntryFiles.includes(f.path))
+    .map(f => `\n${'='.repeat(60)}\nFILE: ${f.path} (Sampled content, ${f.size} bytes)\n${'='.repeat(60)}\n${f.content.slice(0, 1500)}`)
     .join('\n');
 
   const fileTypeInfo = Object.entries(structure.file_type_breakdown)
@@ -318,8 +330,8 @@ export async function analyzeCodebase(
     .map(([ext, count]) => `${ext}: ${count} files`)
     .join(', ');
 
-  const prompt = `You are a senior software architect performing a deep codebase analysis.
-Analyze this GitHub repository thoroughly based on ALL provided files.
+  const prompt = `You are a senior software architect performing a deep codebase analysis based on system metadata and core entry files.
+Analyze this GitHub repository thoroughly based on the provided metadata and entry point contents.
 Return ONLY a valid JSON object — no markdown, no preamble, no trailing text.
 
 REPOSITORY METADATA:
@@ -333,7 +345,17 @@ REPOSITORY METADATA:
 DIRECTORY STRUCTURE:
 ${structure.directory_structure}
 
-SAMPLED FILE CONTENTS (${structure.sampled_files.length} files analyzed):
+EXTRACTED SYSTEM METADATA:
+${JSON.stringify({
+  files: phase1Metadata.files.slice(0, 15), // top 15 files by score
+  imports: phase1Metadata.imports,
+  functions: phase1Metadata.functions,
+  classes: phase1Metadata.classes,
+  complexity: phase1Metadata.complexity,
+  dependencies: phase1Metadata.dependencies,
+}, null, 2)}
+
+CORE ENTRY FILE CONTENTS (${topEntryFiles.length} key files sampled):
 ${sampledFilesContent}
 
 Return this EXACT JSON structure — no markdown, no extra text, only JSON:
@@ -436,32 +458,44 @@ estimated_minutes: be realistic — a simple README fix is 15 min, adding CI/CD 
 file_insights: provide insights for AT LEAST 5 key files
 Return empty arrays [] if nothing found — never omit a field`;
 
-  const response = await client.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    max_tokens: 3000,
-    messages: [{ role: 'user', content: prompt.slice(0, 25000) }],
-    temperature: 0.1,
-  });
+  let parsed: CodebaseAnalysis | null = null;
+  let lastError: Error | null = null;
 
-  const raw   = response.choices[0]?.message?.content || '';
-  const clean = raw.replace(/```json\n?|\n?```/g, '').trim();
-  const match = clean.match(/\{[\s\S]*\}/);
+  for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+    const response = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: attempt === 0 ? 6000 : 4000,
+      messages: [{
+        role: 'user',
+        content: attempt === 0
+          ? prompt.slice(0, 25000)
+          : `${prompt.slice(0, 12000)}\n\nIMPORTANT: Keep arrays short (max 3 items each). Return ONLY valid complete JSON.`,
+      }],
+      temperature: 0.1,
+    });
 
-  try {
-    const parsed = JSON.parse(match ? match[0] : clean) as CodebaseAnalysis;
-    // Inject accurate language data from GitHub API (more reliable than AI guess)
-    if (structure.languages && Object.keys(structure.languages).length > 0) {
-      const total = Object.values(structure.languages).reduce((a, b) => a + b, 0);
-      parsed.languages_used = Object.entries(structure.languages)
-        .sort(([,a],[,b]) => b - a)
-        .map(([name, bytes]) => ({
-          name,
-          bytes,
-          percentage: Math.round((bytes / total) * 100),
-        }));
+    const raw = response.choices[0]?.message?.content || '';
+    try {
+      parsed = parseModelJson<CodebaseAnalysis>(raw);
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
     }
-    return parsed;
-  } catch (e) {
-    throw new Error('Failed to parse codebase analysis: ' + (e instanceof Error ? e.message : ''));
   }
+
+  if (!parsed) {
+    throw new Error('Failed to parse codebase analysis: ' + (lastError?.message || 'Unknown error'));
+  }
+
+  // Inject accurate language data from GitHub API (more reliable than AI guess)
+  if (structure.languages && Object.keys(structure.languages).length > 0) {
+    const total = Object.values(structure.languages).reduce((a, b) => a + b, 0);
+    parsed.languages_used = Object.entries(structure.languages)
+      .sort(([,a],[,b]) => b - a)
+      .map(([name, bytes]) => ({
+        name,
+        bytes,
+        percentage: Math.round((bytes / total) * 100),
+      }));
+  }
+  return parsed;
 }
