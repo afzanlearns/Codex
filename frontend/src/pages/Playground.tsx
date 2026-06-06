@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
+import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
 import { Review } from '../types';
 
 const SecurityIcon = () => (
@@ -120,9 +121,8 @@ function loginUser(req, res) {
   });
 }`;
 
-const LS_CODE     = 'pg_code';
-const LS_LANG     = 'pg_language';
-const LS_REVIEW   = 'pg_review';
+// Legacy keys kept for backward compat — now handled by storage helpers
+const PERSIST_KEY = 'playground';
  
 const ShareIcon = ({ size = 15, color = 'currentColor' }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
@@ -132,21 +132,74 @@ const ShareIcon = ({ size = 15, color = 'currentColor' }: { size?: number; color
   </svg>
 );
 
+interface PlaygroundPersistedState {
+  code: string;
+  language: string;
+  review: Review | null;
+  activeTab: 'overview' | 'issues' | 'improvements' | 'details';
+  savedAt: string;
+}
+
 export default function Playground() {
-  const [code, setCode]         = useState<string>(() => localStorage.getItem(LS_CODE) ?? '');
-  const [language, setLanguage] = useState<string>(() => localStorage.getItem(LS_LANG) ?? 'javascript');
-  const [review, setReview]     = useState<Review | null>(() => {
-    try { const s = localStorage.getItem(LS_REVIEW); return s ? JSON.parse(s) as Review : null; } catch { return null; }
-  });
+  // ── Restore persisted state on first mount ──
+  const persisted = storageGet<PlaygroundPersistedState>(PERSIST_KEY);
+
+  const [code, setCode]         = useState<string>(persisted?.code ?? '');
+  const [language, setLanguage] = useState<string>(persisted?.language ?? 'javascript');
+  const [review, setReview]     = useState<Review | null>(persisted?.review ?? null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
-  const [activeTab, setActiveTab] = useState<'overview'|'issues'|'improvements'|'details'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview'|'issues'|'improvements'|'details'>(persisted?.activeTab ?? 'overview');
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [isCopied, setIsCopied]   = useState(false);
+  const [restoredAt]            = useState<string | null>(persisted?.savedAt ?? null);
 
-  useEffect(() => { localStorage.setItem(LS_CODE,   code);                         }, [code]);
-  useEffect(() => { localStorage.setItem(LS_LANG,   language);                     }, [language]);
-  useEffect(() => { review ? localStorage.setItem(LS_REVIEW, JSON.stringify(review)) : localStorage.removeItem(LS_REVIEW); }, [review]);
+  const codeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Persist on every meaningful state change
+  function persist(overrides: Partial<PlaygroundPersistedState> = {}) {
+    storageSet(PERSIST_KEY, {
+      code,
+      language,
+      review,
+      activeTab,
+      savedAt: new Date().toISOString(),
+      ...overrides,
+    });
+  }
+
+  // Debounced code persist
+  function handleCodeChange(val: string) {
+    setCode(val);
+    if (codeDebounceRef.current) clearTimeout(codeDebounceRef.current);
+    codeDebounceRef.current = setTimeout(() => {
+      persist({ code: val });
+    }, 500);
+  }
+
+  // Persist language immediately
+  function handleLanguageChange(val: string) {
+    setLanguage(val);
+    persist({ language: val });
+  }
+
+  // Persist tab immediately
+  function handleTabChange(tab: 'overview' | 'issues' | 'improvements' | 'details') {
+    setActiveTab(tab);
+    persist({ activeTab: tab });
+  }
+
+  function handleClear() {
+    storageClear(PERSIST_KEY);
+    // Also clear legacy keys if any
+    try { localStorage.removeItem('pg_code'); localStorage.removeItem('pg_language'); localStorage.removeItem('pg_review'); } catch {}
+    setCode('');
+    setLanguage('javascript');
+    setReview(null);
+    setActiveTab('overview');
+    setExpandedIssue(null);
+    setError('');
+  }
 
   // Handle shared link
   useEffect(() => {
@@ -197,7 +250,8 @@ export default function Playground() {
     setExpandedIssue(null);
     try {
       const result = await api.playground.review({ code, language });
-      setReview(result);
+      setReview(result as Review);
+      persist({ review: result as Review, activeTab: 'overview' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Review failed.');
     } finally {
@@ -228,11 +282,48 @@ export default function Playground() {
 
         {/* Header */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Playground</p>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>
-            No account needed · Llama 3.3 70B · OWASP-grounded security · Results stored in MySQL
-          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Playground</p>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>
+                No account needed · Llama 3.3 70B · OWASP-grounded security · Results stored in MySQL
+              </p>
+              {restoredAt && (
+                <p style={{ fontSize: '10px', color: 'var(--text-3)', margin: '0.5rem 0 0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  // restored from {timeAgo(restoredAt)}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleClear}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-3)',
+                fontFamily: 'var(--font)',
+                fontSize: '10px',
+                fontWeight: 500,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                padding: '4px 12px',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, color 0.15s',
+                flexShrink: 0,
+                marginTop: '0.25rem',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'var(--border-2)';
+                e.currentTarget.style.color = 'var(--text-2)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-3)';
+              }}
+            >
+              // Clear
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'stretch' }}>
@@ -262,7 +353,7 @@ export default function Playground() {
                 </div>
                 <select
                   value={language}
-                  onChange={e => setLanguage(e.target.value)}
+                  onChange={e => handleLanguageChange(e.target.value)}
                   style={{
                     background: 'var(--bg-2)',
                     border: '1px solid rgba(255,255,255,0.1)',
@@ -282,7 +373,7 @@ export default function Playground() {
 
               <textarea
                 value={code}
-                onChange={e => setCode(e.target.value)}
+                onChange={e => handleCodeChange(e.target.value)}
                 onBlur={handleAutoDetect}
                 placeholder={PLACEHOLDER}
                 spellCheck={false}
@@ -478,7 +569,7 @@ export default function Playground() {
                     { key: 'improvements', label: `Fixes (${review.improvements?.length ?? 0})` },
                     { key: 'details',      label: 'Details' },
                   ] as { key: typeof activeTab; label: string }[]).map(tab => (
-                    <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
+                    <button key={tab.key} onClick={() => handleTabChange(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
                       {tab.label}
                     </button>
                   ))}

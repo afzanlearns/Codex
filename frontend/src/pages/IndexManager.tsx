@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
+import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -21,6 +22,7 @@ interface IndexedRepo {
 
 interface GitHubRepo {
   id: number;
+  codex_repo_id?: number | null;
   name: string;
   full_name: string;
   language: string;
@@ -63,6 +65,11 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
+interface IndexPersistedState {
+  selectedRepoId: number | null;
+  savedAt: string;
+}
+
 export default function IndexManager() {
   const { token } = useAuth();
   const [repos, setRepos] = useState<IndexedRepo[]>([]);
@@ -73,6 +80,24 @@ export default function IndexManager() {
   const [owaspStatus, setOwaspStatus] = useState<{ status: string; count: number } | null>(null);
   const [seedingOwasp, setSeedingOwasp] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Restore persisted state ──
+  const persisted = storageGet<IndexPersistedState>('index');
+  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(persisted?.selectedRepoId ?? null);
+  const [restoredAt, setRestoredAt] = useState<string | null>(persisted?.savedAt ?? null);
+
+  const persist = useCallback((repoId: number | null) => {
+    storageSet('index', {
+      selectedRepoId: repoId,
+      savedAt: new Date().toISOString(),
+    } as IndexPersistedState);
+  }, []);
+
+  function handleClear() {
+    storageClear('index');
+    setSelectedRepoId(null);
+    setRestoredAt(null);
+  }
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -114,16 +139,19 @@ export default function IndexManager() {
     }, 1200);
   }
 
-  async function startIndex(repoId: number) {
+  async function startIndex(repoId: number | null, fullName?: string) {
     setError('');
     try {
       const res = await fetch(`${API}/api/rag/index`, {
         method: 'POST', headers,
-        body: JSON.stringify({ repoId }),
+        body: JSON.stringify(repoId ? { repoId } : { fullName }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to start indexing'); return; }
-      pollJob(repoId, data.jobId);
+      if (!res.ok) {
+        setError(data.error || (res.status === 429 ? 'Rate limit reached — wait a moment and try again.' : 'Failed to start indexing'));
+        return;
+      }
+      pollJob(data.repoId ?? repoId ?? 0, data.jobId);
     } catch (e) {
       setError('Network error starting index');
     }
@@ -153,8 +181,22 @@ export default function IndexManager() {
     }
   }
 
-  const indexedIds = new Set(repos.map(r => r.repo_id));
-  const unindexedRepos = githubRepos.filter(r => !indexedIds.has(r.id));
+  const indexedNames = new Set(repos.map(r => r.full_name));
+  const unindexedRepos = githubRepos.filter(r => !indexedNames.has(r.full_name));
+
+  const selectedGhRepo = useMemo(() => {
+    return githubRepos.find(r => r.id === selectedRepoId);
+  }, [githubRepos, selectedRepoId]);
+
+  const filteredIndexedRepos = useMemo(() => {
+    if (!selectedRepoId || !selectedGhRepo) return repos;
+    return repos.filter(r => r.full_name === selectedGhRepo.full_name);
+  }, [repos, selectedRepoId, selectedGhRepo]);
+
+  const filteredUnindexedRepos = useMemo(() => {
+    if (!selectedRepoId || !selectedGhRepo) return unindexedRepos;
+    return unindexedRepos.filter(r => r.full_name === selectedGhRepo.full_name);
+  }, [unindexedRepos, selectedRepoId, selectedGhRepo]);
 
   function fmtDuration(ms: number) {
     if (!ms) return '—';
@@ -237,14 +279,74 @@ export default function IndexManager() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '2rem', alignItems: 'start' }}>
           {/* Main — Indexed Repos */}
           <div>
-            {repos.length > 0 && (
+            {/* Repo Selector */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              marginBottom: '2rem',
+              background: 'var(--bg-1)',
+              padding: '1rem',
+              border: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Select Repository:
+              </span>
+              <select
+                value={selectedRepoId ?? ''}
+                onChange={e => {
+                  const val = e.target.value ? Number(e.target.value) : null;
+                  setSelectedRepoId(val);
+                  persist(val);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem 0.75rem',
+                  background: 'var(--bg-2)',
+                  border: '1px solid var(--border-2)',
+                  color: 'var(--text-1)',
+                  fontSize: '0.75rem',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="">All Repositories</option>
+                {githubRepos.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.full_name} {indexedNames.has(r.full_name) ? '(Indexed)' : '(Unindexed)'}
+                  </option>
+                ))}
+              </select>
+              {selectedRepoId !== null && (
+                <button
+                  onClick={handleClear}
+                  className="btn-ghost"
+                  style={{
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.6875rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                  }}
+                >
+                  // Reset
+                </button>
+              )}
+            </div>
+            {restoredAt && selectedRepoId !== null && (
+              <p style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '-1.5rem', marginBottom: '2rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                // selection restored from {timeAgo(restoredAt)}
+              </p>
+            )}
+
+            {filteredIndexedRepos.length > 0 && (
               <div style={{ marginBottom: '2.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
                   <span className="label">Indexed Repositories</span>
-                  <span className="tag">{repos.length}</span>
+                  <span className="tag">{filteredIndexedRepos.length}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', border: '1px solid var(--border)' }}>
-                  {repos.map(repo => {
+                  {filteredIndexedRepos.map(repo => {
                     const job = activeJobs[repo.repo_id];
                     const isRunning = job && job.status !== 'done' && job.status !== 'failed';
                     return (
@@ -319,18 +421,18 @@ export default function IndexManager() {
             )}
 
             {/* Unindexed repos */}
-            {unindexedRepos.length > 0 && (
+            {filteredUnindexedRepos.length > 0 && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
                   <span className="label">Available to Index</span>
-                  <span className="tag">{unindexedRepos.length}</span>
+                  <span className="tag">{filteredUnindexedRepos.length}</span>
                 </div>
                 <div style={{ border: '1px solid var(--border)' }}>
-                  {unindexedRepos.map((repo, i) => (
+                  {filteredUnindexedRepos.map((repo, i) => (
                     <div key={repo.id} style={{
                       padding: '1.25rem 1.5rem',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      borderBottom: i < unindexedRepos.length - 1 ? '1px solid var(--border)' : 'none',
+                      borderBottom: i < filteredUnindexedRepos.length - 1 ? '1px solid var(--border)' : 'none',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                         <span style={{ width: '7px', height: '7px', background: 'var(--border-2)', display: 'inline-block', flexShrink: 0 }} />
@@ -344,7 +446,7 @@ export default function IndexManager() {
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         {repo.language && <span className="tag">{repo.language}</span>}
                         <button
-                          onClick={() => startIndex(repo.id)}
+                          onClick={() => startIndex(repo.codex_repo_id ?? null, repo.full_name)}
                           className="btn-primary"
                           style={{ padding: '0.375rem 0.75rem', fontSize: '0.6rem' }}
                         >
@@ -357,12 +459,19 @@ export default function IndexManager() {
               </div>
             )}
 
-            {repos.length === 0 && unindexedRepos.length === 0 && (
+            {repos.length === 0 && unindexedRepos.length === 0 ? (
               <div style={{ padding: '4rem 2rem', textAlign: 'center', border: '1px solid var(--border)' }}>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', marginBottom: '0.5rem' }}>No GitHub repositories found.</p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>Connect your GitHub account in settings to see your repos here.</p>
               </div>
-            )}
+            ) : (filteredIndexedRepos.length === 0 && filteredUnindexedRepos.length === 0) ? (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center', border: '1px solid var(--border)' }}>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', marginBottom: '0.5rem' }}>No repositories match your selection.</p>
+                <button onClick={handleClear} className="btn-ghost" style={{ padding: '0.5rem 1rem', fontSize: '0.6875rem' }}>
+                  Clear Filter
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* Sidebar */}

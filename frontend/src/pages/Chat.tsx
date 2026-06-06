@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
+import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -29,6 +30,16 @@ interface ChatableRepo {
   language: string;
   chunk_count: number;
   last_indexed_at: string;
+}
+
+interface ChatPersistedState {
+  activeRepoId: number | null;
+  savedAt: string;
+}
+
+interface RepoChatState {
+  messages: Message[];
+  savedAt: string;
 }
 
 const SUGGESTIONS = [
@@ -126,33 +137,68 @@ function MessageBubble({ msg }: { msg: Message }) {
 export default function Chat() {
   const { token } = useAuth();
   const [repos, setRepos] = useState<ChatableRepo[]>([]);
-  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
   const [loadingRepos, setLoadingRepos] = useState(true);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [input, setInput] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // ── Restore persisted global state ──
+  const persisted = storageGet<ChatPersistedState>('chat');
+  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(persisted?.activeRepoId ?? null);
+  const [restoredAt] = useState<string | null>(persisted?.savedAt ?? null);
+
+  // ── Messages are stored per-repo ──
+  function loadRepoMessages(repoId: number | null): Message[] {
+    if (!repoId) return [];
+    return storageGet<RepoChatState>(`chat_repo_${repoId}`)?.messages ?? [];
+  }
+
+  const [messages, setMessages] = useState<Message[]>(() => loadRepoMessages(persisted?.activeRepoId ?? null));
+
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
+  // ── Load repos list ──
   useEffect(() => {
     fetch(`${API}/api/chat/repos`, { headers })
       .then(r => r.ok ? r.json() : [])
       .then((data: ChatableRepo[]) => {
         setRepos(data);
-        if (data.length > 0) setSelectedRepoId(data[0].repo_id);
+        // If no persisted repo, auto-select first
+        if (!persisted?.activeRepoId && data.length > 0) {
+          const firstId = data[0].repo_id;
+          setSelectedRepoId(firstId);
+          setMessages(loadRepoMessages(firstId));
+        }
       })
       .finally(() => setLoadingRepos(false));
   }, []);
 
+  // ── Scroll to bottom on new messages ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const selectedRepo = repos.find(r => r.repo_id === selectedRepoId);
+
+  // ── Persist messages for active repo ──
+  function persistMessages(msgs: Message[], repoId: number | null) {
+    if (!repoId) return;
+    // Strip isStreaming flag before persisting
+    const clean = msgs.filter(m => !m.isStreaming).map(m => ({ ...m, isStreaming: undefined }));
+    storageSet(`chat_repo_${repoId}`, { messages: clean, savedAt: new Date().toISOString() } as RepoChatState);
+    storageSet('chat', { activeRepoId: repoId, savedAt: new Date().toISOString() } as ChatPersistedState);
+  }
+
+  // ── Switch repo ──
+  function handleRepoChange(repoId: number) {
+    setSelectedRepoId(repoId);
+    const saved = loadRepoMessages(repoId);
+    setMessages(saved);
+    storageSet('chat', { activeRepoId: repoId, savedAt: new Date().toISOString() } as ChatPersistedState);
+  }
 
   const sendMessage = useCallback(async (query: string) => {
     if (!query.trim() || isStreaming) return;
@@ -162,7 +208,8 @@ export default function Chat() {
     const assistantId = (Date.now() + 1).toString();
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', isStreaming: true };
 
-    setMessages(prev => [...prev, userMsg, assistantMsg]);
+    const newMsgs = [...messages, userMsg, assistantMsg];
+    setMessages(newMsgs);
     setIsStreaming(true);
     setStatusMsg('');
 
@@ -224,11 +271,13 @@ export default function Chat() {
         }
       }
 
-      setMessages(prev => prev.map(m =>
+      const finalMsgs = newMsgs.map(m =>
         m.id === assistantId
           ? { ...m, content: accText, isStreaming: false, sources: currentSources }
           : m
-      ));
+      );
+      setMessages(finalMsgs);
+      persistMessages(finalMsgs, selectedRepoId);
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return;
       setMessages(prev => prev.map(m =>
@@ -256,6 +305,8 @@ export default function Chat() {
   }
 
   function clearChat() {
+    storageClear('chat');
+    if (selectedRepoId) storageClear(`chat_repo_${selectedRepoId}`);
     setMessages([]);
     setStatusMsg('');
   }
@@ -290,7 +341,7 @@ export default function Chat() {
         ) : (
           <select
             value={selectedRepoId ?? ''}
-            onChange={e => { setSelectedRepoId(Number(e.target.value)); clearChat(); }}
+            onChange={e => handleRepoChange(Number(e.target.value))}
             style={{ padding: '0.25rem 0.5rem', fontSize: '0.6875rem', background: 'var(--bg-2)', border: '1px solid var(--border-2)', color: 'var(--text-1)' }}
           >
             <option value="" disabled>Select repo</option>
@@ -309,19 +360,48 @@ export default function Chat() {
           </div>
         )}
 
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'inherit', marginLeft: selectedRepo ? '0' : 'auto' }}
-          >
-            Clear
-          </button>
-        )}
+        {/* Clear button — always visible, styled per spec */}
+        <button
+          onClick={clearChat}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-3)',
+            fontFamily: 'var(--font)',
+            fontSize: '10px',
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            transition: 'border-color 0.15s, color 0.15s',
+            marginLeft: selectedRepo ? '0' : 'auto',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--border-2)';
+            e.currentTarget.style.color = 'var(--text-2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.color = 'var(--text-3)';
+          }}
+        >
+          // Clear Conversation
+        </button>
       </div>
 
       {/* Messages area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '2rem 1.5rem' }}>
         <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+
+          {/* Restore banner */}
+          {messages.length > 0 && restoredAt && (
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                // conversation restored from {timeAgo(restoredAt)}
+              </span>
+            </div>
+          )}
 
           {messages.length === 0 && (
             <div style={{ paddingTop: '3rem' }}>
