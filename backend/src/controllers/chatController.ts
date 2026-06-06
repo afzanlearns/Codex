@@ -18,32 +18,60 @@ Rules:
 - Never hallucinate functions, variables, or files that aren't in the context.`;
 
 // POST /api/chat
-// Body: { query: string, repoId?: number, conversationHistory?: [{role, content}] }
+// Body: { message: string, repoId?: number, history?: [{role, content}], sessionId?: number }
 // Returns streaming SSE
 export async function chatWithCodebase(req: Request, res: Response): Promise<void> {
-  const { query, repoId, conversationHistory = [] } = req.body as {
-    query: string;
+  const { message, repoId, history = [], sessionId } = req.body as {
+    message: string;
     repoId?: number;
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    history?: Array<{ role: string; content: string }>;
+    sessionId?: number;
   };
 
   const userId = req.user!.id;
 
-  if (!query || query.trim().length < 3) {
-    res.status(400).json({ error: 'Query must be at least 3 characters' });
+  if (!repoId || !message || !message.trim()) {
+    console.error('[chat] 400 — received body:', {
+      repoId,
+      messageLength: message?.length,
+      sessionId,
+      historyLength: history?.length,
+    });
+    res.status(400).json({
+      error: 'repoId and message are required',
+      received: { repoId: !!repoId, message: !!message?.trim() },
+    });
     return;
   }
 
-  // Verify repoId belongs to this user if provided
-  if (repoId) {
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      'SELECT id FROM indexed_repos WHERE repo_id = ? AND user_id = ? AND status = ?',
-      [repoId, userId, 'ready']
-    );
-    if (!rows.length) {
-      res.status(404).json({ error: 'Repository not indexed or not found. Please index it first.' });
-      return;
-    }
+  if (message.trim().length < 3) {
+    res.status(400).json({ error: 'Message must be at least 3 characters' });
+    return;
+  }
+
+  // Sanitize history — never trust client format
+  // Normalise roles: 'codex' → 'assistant', drop anything else unusual
+  const cleanHistory = (Array.isArray(history) ? history : [])
+    .filter((m): m is { role: string; content: string } =>
+      m != null &&
+      typeof m === 'object' &&
+      typeof (m as Record<string, unknown>).role === 'string' &&
+      typeof (m as Record<string, unknown>).content === 'string'
+    )
+    .map(m => ({
+      role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: String(m.content).slice(0, 2000),
+    }))
+    .slice(-8);
+
+  // Verify repoId belongs to this user
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    'SELECT id FROM indexed_repos WHERE repo_id = ? AND user_id = ? AND status = ?',
+    [repoId, userId, 'ready']
+  );
+  if (!rows.length) {
+    res.status(404).json({ error: 'Repository not indexed or not found. Please index it first.' });
+    return;
   }
 
   // Set SSE headers
@@ -61,7 +89,7 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
     // 1. Retrieve relevant code chunks
     sendEvent('status', { message: 'Searching codebase...', phase: 'retrieval' });
 
-    const chunks = await retrievalService.retrieveForChat(query, repoId, userId, 8);
+    const chunks = await retrievalService.retrieveForChat(message, repoId, userId, 8);
 
     if (chunks.length === 0 && repoId) {
       sendEvent('error', { message: 'No relevant code found. Try indexing your repository first.' });
@@ -87,15 +115,15 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
 
     sendEvent('sources', { sources: citationMap });
 
-    // 3. Build messages
+    // 3. Build messages (use cleanHistory not raw history)
     const systemMsg = chunks.length > 0
       ? `${CHAT_SYSTEM_PROMPT}\n\n--- RETRIEVED CODE CONTEXT ---\n${contextBlock}\n--- END CONTEXT ---`
       : `${CHAT_SYSTEM_PROMPT}\n\nNote: No specific repository is indexed. Answer general programming questions only.`;
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemMsg },
-      ...conversationHistory.slice(-8).map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: query },
+      ...cleanHistory,
+      { role: 'user', content: message.trim() },
     ];
 
     sendEvent('status', { message: 'Generating response...', phase: 'generation' });
@@ -107,6 +135,11 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
       stream: true,
       messages,
     });
+
+    // Expose sessionId if one was passed in (allows frontend to track it)
+    if (sessionId && typeof sessionId === 'number' && sessionId > 0) {
+      sendEvent('session', { sessionId });
+    }
 
     let fullResponse = '';
     for await (const chunk of stream) {

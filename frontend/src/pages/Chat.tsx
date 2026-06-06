@@ -141,6 +141,7 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [input, setInput] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -195,6 +196,7 @@ export default function Chat() {
   // ── Switch repo ──
   function handleRepoChange(repoId: number) {
     setSelectedRepoId(repoId);
+    setActiveSessionId(null); // reset session when switching repo
     const saved = loadRepoMessages(repoId);
     setMessages(saved);
     storageSet('chat', { activeRepoId: repoId, savedAt: new Date().toISOString() } as ChatPersistedState);
@@ -213,7 +215,29 @@ export default function Chat() {
     setIsStreaming(true);
     setStatusMsg('');
 
-    const conversationHistory = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
+    // ── Build sanitized history ──
+    // - Map any display role ('codex') to 'assistant'
+    // - Strip everything except role + content (no sources, timestamps, etc.)
+    // - Only keep the last 8 turns
+    const historyForAPI = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-8)
+      .map(m => ({
+        role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+    // ── Build request body ──
+    const body: Record<string, unknown> = {
+      repoId: selectedRepoId,
+      message: query.trim(),
+      history: historyForAPI,
+    };
+
+    // Only send sessionId when it is a valid positive integer
+    if (activeSessionId && typeof activeSessionId === 'number' && activeSessionId > 0) {
+      body.sessionId = activeSessionId;
+    }
 
     abortRef.current = new AbortController();
 
@@ -222,15 +246,13 @@ export default function Chat() {
         method: 'POST',
         headers,
         signal: abortRef.current.signal,
-        body: JSON.stringify({
-          query,
-          repoId: selectedRepoId,
-          conversationHistory,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok || !res.body) {
-        throw new Error('Chat request failed');
+        const errText = await res.text().catch(() => '');
+        console.error('[chat] request failed', res.status, errText);
+        throw new Error(`Chat request failed: ${res.status}`);
       }
 
       const reader = res.body.getReader();
@@ -258,6 +280,9 @@ export default function Chat() {
                 ));
               } else if (data.sources) {
                 currentSources = data.sources;
+              } else if (data.sessionId && typeof data.sessionId === 'number') {
+                // Capture session ID returned from backend
+                setActiveSessionId(data.sessionId);
               } else if (data.message) {
                 setStatusMsg(data.message);
               } else if (data.error) {
@@ -290,7 +315,7 @@ export default function Chat() {
       setStatusMsg('');
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isStreaming, messages, selectedRepoId, token]);
+  }, [isStreaming, messages, selectedRepoId, activeSessionId, token]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -309,6 +334,7 @@ export default function Chat() {
     if (selectedRepoId) storageClear(`chat_repo_${selectedRepoId}`);
     setMessages([]);
     setStatusMsg('');
+    setActiveSessionId(null);
   }
 
   return (
