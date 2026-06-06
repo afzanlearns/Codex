@@ -75,8 +75,8 @@ coverage/
 # -----------------------
 # TYPO CLEANUP
 # -----------------------
-# Ignore the typo directory created during command execution
-{database,backend/
+database/
+chroma_data/
 
 # -----------------------
 # TEMPORARY SCRIPTS
