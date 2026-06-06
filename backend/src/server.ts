@@ -143,8 +143,26 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
+// ── ChromaDB pre-flight check ────────────────────────────────
+async function checkChromaDB(): Promise<void> {
+  const chromaUrl = process.env.CHROMA_URL || 'http://localhost:8000';
+  try {
+    const res = await fetch(`${chromaUrl}/api/v1/heartbeat`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    console.log(`✅ ChromaDB connected at ${chromaUrl}`);
+  } catch {
+    console.error('❌ ChromaDB is not running.');
+    console.error(`   Expected it at: ${chromaUrl}`);
+    console.error('   Start it first in a separate terminal:');
+    console.error('     python start_chroma.py');
+    console.error('   Then restart the backend.');
+    process.exit(1);
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────
 async function bootstrap() {
+  await checkChromaDB();
   await testConnection();
   app.listen(PORT, () => {
     console.log(`🚀 Codex 2.0 API running on http://localhost:${PORT}`);
