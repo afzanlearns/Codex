@@ -5,9 +5,9 @@ import crypto from 'crypto';
 
 export async function getReviewHistory(req: Request, res: Response): Promise<void> {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, score_overall, language, summary, is_playground, created_at
+    `SELECT id, overall_score AS score_overall, language, summary, created_at
      FROM reviews
-     WHERE developer_id = ?
+     WHERE user_id = ?
      ORDER BY created_at DESC
      LIMIT 100`,
     [req.user!.id]
@@ -123,11 +123,19 @@ export async function detectLanguage(req: Request, res: Response): Promise<void>
 
 export async function updateGoal(req: Request, res: Response): Promise<void> {
   const { score_goal, score_goal_deadline } = req.body as { score_goal: number; score_goal_deadline: string };
-  await pool.execute(
-    'UPDATE users SET score_goal = ?, score_goal_deadline = ? WHERE id = ?',
-    [score_goal, score_goal_deadline, req.user!.id]
-  );
-  res.json({ success: true });
+  try {
+    await pool.execute(
+      'UPDATE users SET score_goal = ?, score_goal_deadline = ? WHERE id = ?',
+      [score_goal, score_goal_deadline, req.user!.id]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err?.code === 'ER_BAD_FIELD_ERROR') {
+      res.status(501).json({ error: 'Goal tracking is not available on this database schema yet.' });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function updateStreak(userId: number): Promise<void> {

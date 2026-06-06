@@ -153,7 +153,7 @@ export async function handleGithubWebhook(req: Request, res: Response): Promise<
 
       // Find the repo in our database
       const [repos] = await pool.execute<RowDataPacket[]>(
-        'SELECT r.*, u.github_access_token, u.id as owner_user_id FROM repositories r JOIN teams t ON t.id = r.team_id JOIN users u ON u.id = t.owner_id WHERE r.full_name = ?',
+        'SELECT r.*, u.github_token, u.id as owner_user_id FROM repositories r JOIN teams t ON t.id = r.team_id JOIN users u ON u.id = t.owner_id WHERE r.full_name = ?',
         [fullName]
       );
 
@@ -163,7 +163,7 @@ export async function handleGithubWebhook(req: Request, res: Response): Promise<
       }
 
       const dbRepo      = repos[0];
-      const accessToken = dbRepo.github_access_token;
+      const accessToken = dbRepo.github_token;
       const repoId      = dbRepo.id;
 
       // Verify webhook signature if secret is stored
@@ -376,7 +376,7 @@ export async function installWebhook(req: Request, res: Response): Promise<void>
   const { repoId } = req.body as { repoId: number };
 
   const [repos] = await pool.execute<RowDataPacket[]>(
-    `SELECT r.*, u.github_access_token 
+    `SELECT r.*, u.github_token 
      FROM repositories r 
      CROSS JOIN users u 
      WHERE r.id = ? AND u.id = ?`,
@@ -386,7 +386,7 @@ export async function installWebhook(req: Request, res: Response): Promise<void>
   if (!repos.length) { res.status(404).json({ error: 'Repo not found' }); return; }
   const repo = repos[0];
 
-  if (!repo.github_access_token) {
+  if (!repo.github_token) {
     res.status(400).json({ error: 'GitHub not connected. Sign in with GitHub first.' });
     return;
   }
@@ -396,7 +396,7 @@ export async function installWebhook(req: Request, res: Response): Promise<void>
   const webhookUrl = `${process.env.WEBHOOK_PUBLIC_URL || 'https://your-server.com'}/api/webhooks/github`;
 
   try {
-    const octokit = new Octokit({ auth: repo.github_access_token });
+    const octokit = new Octokit({ auth: repo.github_token });
     const { data: hook } = await octokit.rest.repos.createWebhook({
       owner, repo: repoName,
       config: { url: webhookUrl, content_type: 'json', secret: webhookSecret },
@@ -429,7 +429,7 @@ export async function getAllPRs(req: Request, res: Response): Promise<void> {
        r.language  AS repo_language,
        r.webhook_active,
        u.name      AS developer_name,
-       u.avatar_url,
+      u.github_avatar AS avatar_url,
        u.github_username,
        rev.id           AS review_id,
        rev.score_overall,
@@ -465,7 +465,7 @@ export async function getPRDetail(req: Request, res: Response): Promise<void> {
 
   const [prs] = await pool.execute<RowDataPacket[]>(
     `SELECT pr.*, r.full_name AS repo_name, r.language,
-            u.name AS developer_name, u.avatar_url, u.github_username
+          u.name AS developer_name, u.github_avatar AS avatar_url, u.github_username
      FROM pull_requests pr
      JOIN repositories r ON r.id = pr.repository_id
      JOIN users u        ON u.id = pr.developer_id
@@ -509,7 +509,7 @@ export async function triggerManualReview(req: Request, res: Response): Promise<
 
   const [prs] = await pool.execute<RowDataPacket[]>(
     `SELECT pr.*, r.full_name, r.id as repo_id,
-            u.github_access_token
+            u.github_token
      FROM pull_requests pr
      JOIN repositories r ON r.id = pr.repository_id
      JOIN teams t        ON t.id = r.team_id
@@ -525,7 +525,7 @@ export async function triggerManualReview(req: Request, res: Response): Promise<
   // Async review
   setImmediate(async () => {
     const pr          = prs[0];
-    const accessToken = pr.github_access_token;
+    const accessToken = pr.github_token;
     if (!accessToken) return;
 
     const [owner, repoName] = pr.full_name.split('/');

@@ -29,7 +29,18 @@ export async function login(req: Request, res: Response): Promise<void> {
   const { email, password } = req.body as { email: string; password: string };
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id, name, email, password_hash, role, current_score, badge, avatar_url, score_goal, score_goal_deadline FROM users WHERE email = ?',
+    `SELECT id, name, email, password_hash, role, current_score,
+            CASE
+              WHEN total_reviews < 5 THEN 'newcomer'
+              WHEN current_score >= 85 THEN 'consistent'
+              WHEN current_score >= 70 THEN 'improving'
+              WHEN current_score >= 50 THEN 'declining'
+              ELSE 'pattern_offender'
+            END AS badge,
+            github_avatar AS avatar_url,
+            NULL AS score_goal,
+            NULL AS score_goal_deadline
+     FROM users WHERE email = ?`,
     [email]
   );
 
@@ -56,17 +67,26 @@ export async function login(req: Request, res: Response): Promise<void> {
       current_score: user.current_score,
       badge: user.badge,
       avatar_url: user.avatar_url,
-      score_goal: user.score_goal,
-      score_goal_deadline: user.score_goal_deadline,
+      score_goal: null,
+      score_goal_deadline: null,
     },
   });
 }
 
 export async function getMe(req: Request, res: Response): Promise<void> {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, name, email, github_username, avatar_url,
-            current_score, total_reviews, badge, role, created_at,
-            score_goal, score_goal_deadline
+    `SELECT id, name, email, github_username, github_avatar AS avatar_url,
+            current_score, total_reviews,
+            CASE
+              WHEN total_reviews < 5 THEN 'newcomer'
+              WHEN current_score >= 85 THEN 'consistent'
+              WHEN current_score >= 70 THEN 'improving'
+              WHEN current_score >= 50 THEN 'declining'
+              ELSE 'pattern_offender'
+            END AS badge,
+            role, created_at,
+            NULL AS score_goal,
+            NULL AS score_goal_deadline
      FROM users WHERE id = ?`,
     [req.user!.id]
   );
@@ -141,12 +161,12 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
       userId = existing[0].id;
       role   = existing[0].role;
       await pool.execute(
-        'UPDATE users SET github_id = ?, github_username = ?, avatar_url = ?, github_access_token = ? WHERE id = ?',
+        'UPDATE users SET github_id = ?, github_username = ?, github_avatar = ?, github_token = ? WHERE id = ?',
         [ghUser.id, ghUser.login, ghUser.avatar_url, accessToken, userId]
       );
     } else {
       const [result] = await pool.execute<ResultSetHeader>(
-        `INSERT INTO users (name, email, github_id, github_username, avatar_url, github_access_token)
+        `INSERT INTO users (name, email, github_id, github_username, github_avatar, github_token)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [ghUser.name || ghUser.login, email, ghUser.id, ghUser.login, ghUser.avatar_url, accessToken]
       );

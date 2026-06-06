@@ -6,9 +6,9 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 async function getAccessToken(userId: number): Promise<string | null> {
   const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT github_access_token FROM users WHERE id = ?', [userId]
+    'SELECT github_token FROM users WHERE id = ?', [userId]
   );
-  return rows[0]?.github_access_token || null;
+  return rows[0]?.github_token || null;
 }
 
 export async function listGithubRepos(req: Request, res: Response): Promise<void> {
@@ -28,7 +28,7 @@ export async function listGithubRepos(req: Request, res: Response): Promise<void
     }
 
     const [dbRepos] = await pool.query<RowDataPacket[]>(
-      'SELECT id, full_name, webhook_active FROM repositories WHERE full_name IN (?)',
+      'SELECT id, full_name FROM repositories WHERE full_name IN (?)',
       [fullNames]
     );
 
@@ -39,7 +39,7 @@ export async function listGithubRepos(req: Request, res: Response): Promise<void
       return {
         ...r,
         codex_repo_id:  dbRepo ? dbRepo.id : null,
-        webhook_active: dbRepo ? dbRepo.webhook_active : false,
+        webhook_active: false,
       };
     });
 
@@ -61,6 +61,11 @@ export async function analyzeRepo(req: Request, res: Response): Promise<void> {
   try {
     const structure  = await getRepoStructure(token, owner, repo);
     const analysis   = await analyzeCodebase(structure);
+    const scores = analysis?.scores || {} as Partial<typeof analysis.scores>;
+    const overallScore = Number(scores.overall ?? 0);
+    const language = structure.language || null;
+    const description = structure.description || null;
+    const stars = structure.stars || 0;
 
     // Check if repo exists in our DB, insert if not
     const [existing] = await pool.execute(
@@ -71,23 +76,34 @@ export async function analyzeRepo(req: Request, res: Response): Promise<void> {
     if (existing.length > 0) {
       repoId = existing[0].id;
       await pool.execute(
-        `UPDATE repositories SET health_score = ?, last_analyzed_at = NOW(),
-         file_count = ?, primary_language = ?
+        `UPDATE repositories
+         SET owner = ?, name = ?, description = ?, language = ?, is_private = ?, stars = ?, health_score = ?, last_analyzed_at = NOW()
          WHERE id = ?`,
-        [analysis.scores.overall, structure.file_count, structure.language || null, repoId]
+        [
+          owner,
+          repo,
+          description,
+          language,
+          false,
+          stars,
+          overallScore,
+          repoId,
+        ]
       );
     } else {
       const [result] = await pool.execute(
-        `INSERT INTO repositories (team_id, full_name, url, language, health_score, 
-         last_analyzed_at, file_count, primary_language)
-         VALUES (1, ?, ?, ?, ?, NOW(), ?, ?)`,
+        `INSERT INTO repositories (user_id, owner, name, full_name, description, language, is_private, stars, health_score, last_analyzed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
+          req.user!.id,
+          owner,
+          repo,
           structure.full_name,
-          `https://github.com/${structure.full_name}`,
-          structure.language || null,
-          analysis.scores.overall,
-          structure.file_count,
-          structure.language || null,
+          description,
+          language,
+          false,
+          stars,
+          overallScore,
         ]
       ) as [ResultSetHeader, any];
       repoId = result.insertId;
@@ -95,21 +111,36 @@ export async function analyzeRepo(req: Request, res: Response): Promise<void> {
 
     // Store the analysis
     await pool.execute(
-      `INSERT INTO repo_analyses 
-       (repository_id, developer_id, health_score, file_count, languages,
-        summary, strengths, critical_issues, recommendations, raw_structure)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO repo_analyses
+       (repo_id, user_id, overall_score, structure_score, quality_score, security_score,
+        documentation_score, testing_score, performance_score, maintainability_score,
+        dependencies_score, summary, architecture, recommendations, security_findings,
+        language_distribution, how_to_run)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         repoId,
         req.user!.id,
-        analysis.scores.overall,
-        structure.file_count,
-        JSON.stringify(structure.languages),
-        analysis.summary,
-        JSON.stringify(analysis.strengths),
-        JSON.stringify(analysis.critical_issues),
-        JSON.stringify(analysis.recommendations),
-        JSON.stringify(structure.files.slice(0, 100)),
+        overallScore,
+        Number(scores.structure ?? 0),
+        Number(scores.code_quality ?? 0),
+        Number(scores.security ?? 0),
+        Number(scores.documentation ?? 0),
+        Number(scores.test_coverage ?? 0),
+        Number(scores.performance ?? 0),
+        Number(scores.maintainability ?? 0),
+        Number(scores.dependency_health ?? 0),
+        analysis.summary || '',
+        JSON.stringify({
+          notes: analysis.architecture_notes || '',
+          layers: analysis.architecture_layers || [],
+          key_folders: analysis.key_folders || [],
+          tech_stack: analysis.tech_stack || [],
+          strengths: analysis.strengths || [],
+        }),
+        JSON.stringify(analysis.recommendations || []),
+        JSON.stringify(analysis.security_findings || []),
+        JSON.stringify(analysis.languages_used || []),
+        Array.isArray(analysis.how_to_run) ? analysis.how_to_run.join('\n') : '',
       ]
     );
 
@@ -161,6 +192,11 @@ export async function analyzePublicRepo(req: Request, res: Response): Promise<vo
     const structure = await getRepoStructure('', owner, repo);
     const { analyzeCodebase } = await import('../services/aiService');
     const analysis = await analyzeCodebase(structure);
+    const scores = analysis?.scores || {} as Partial<typeof analysis.scores>;
+    const overallScore = Number(scores.overall ?? 0);
+    const language = structure.language || null;
+    const description = structure.description || null;
+    const stars = structure.stars || 0;
 
     // Store in DB without user auth (use guest user id 1)
     const [existing] = await pool.execute<RowDataPacket[]>(
@@ -172,18 +208,54 @@ export async function analyzePublicRepo(req: Request, res: Response): Promise<vo
     if (existing.length > 0) {
       repoId = existing[0].id;
     } else {
-      const sql = 'INSERT INTO repositories (team_id, full_name, url, language, health_score, last_analyzed_at, file_count, primary_language) VALUES (1, ?, ?, ?, ?, NOW(), ?, ?)';
-      const values = [structure.full_name, `https://github.com/${structure.full_name}`, structure.language || null, analysis.scores.overall, structure.file_count, structure.language || null];
+      const sql = 'INSERT INTO repositories (user_id, owner, name, full_name, description, language, is_private, stars, health_score, last_analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
+      const values = [
+        req.user!.id,
+        owner,
+        repo,
+        structure.full_name,
+        description,
+        language,
+        false,
+        stars,
+        overallScore,
+      ];
       const [result] = await pool.execute<ResultSetHeader>(sql, values);
       repoId = result.insertId;
     }
 
     await pool.execute(
-      `INSERT INTO repo_analyses (repository_id, developer_id, health_score, file_count, languages, summary, strengths, critical_issues, recommendations, raw_structure)
-       VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [repoId, analysis.scores.overall, structure.file_count, JSON.stringify(structure.languages),
-       analysis.summary, JSON.stringify(analysis.strengths), JSON.stringify(analysis.critical_issues),
-       JSON.stringify(analysis.recommendations), JSON.stringify(structure.files.slice(0, 100))]
+      `INSERT INTO repo_analyses (
+         repo_id, user_id, overall_score, structure_score, quality_score, security_score,
+         documentation_score, testing_score, performance_score, maintainability_score,
+         dependencies_score, summary, architecture, recommendations, security_findings,
+         language_distribution, how_to_run
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        repoId,
+        1,
+        overallScore,
+        Number(scores.structure ?? 0),
+        Number(scores.code_quality ?? 0),
+        Number(scores.security ?? 0),
+        Number(scores.documentation ?? 0),
+        Number(scores.test_coverage ?? 0),
+        Number(scores.performance ?? 0),
+        Number(scores.maintainability ?? 0),
+        Number(scores.dependency_health ?? 0),
+        analysis.summary || '',
+        JSON.stringify({
+          notes: analysis.architecture_notes || '',
+          layers: analysis.architecture_layers || [],
+          key_folders: analysis.key_folders || [],
+          tech_stack: analysis.tech_stack || [],
+          strengths: analysis.strengths || [],
+        }),
+        JSON.stringify(analysis.recommendations || []),
+        JSON.stringify(analysis.security_findings || []),
+        JSON.stringify(analysis.languages_used || []),
+        Array.isArray(analysis.how_to_run) ? analysis.how_to_run.join('\n') : '',
+      ]
     );
 
     res.json({ repo: structure, analysis, repo_id: repoId, is_public: true });
@@ -201,8 +273,8 @@ export async function getRepoHistory(req: Request, res: Response): Promise<void>
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT ra.*, u.name as analyzed_by
      FROM repo_analyses ra
-     JOIN users u ON u.id = ra.developer_id
-     WHERE ra.repository_id = ?
+     JOIN users u ON u.id = ra.user_id
+     WHERE ra.repo_id = ?
      ORDER BY ra.created_at DESC
      LIMIT 20`,
     [repoId]
@@ -213,9 +285,11 @@ export async function getRepoHistory(req: Request, res: Response): Promise<void>
 export async function getRepoHealthTrend(req: Request, res: Response): Promise<void> {
   const { repoId } = req.params;
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT health_score, file_count, created_at
+    `SELECT overall_score, structure_score, quality_score, security_score,
+            documentation_score, testing_score, performance_score,
+            maintainability_score, dependencies_score, created_at
      FROM repo_analyses
-     WHERE repository_id = ?
+     WHERE repo_id = ?
      ORDER BY created_at ASC
      LIMIT 30`,
     [repoId]

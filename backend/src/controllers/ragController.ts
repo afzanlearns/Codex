@@ -1,27 +1,64 @@
 import { Request, Response } from 'express';
 import { ingestionService } from '../services/ingestionService';
 import { owaspService } from '../services/owaspService';
+import { getRepoStructure } from '../services/githubService';
 import pool from '../db/connection';
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
+
+async function resolveRepoId(
+  userId: number,
+  repoId: number | undefined,
+  fullName: string | undefined,
+  githubToken: string
+): Promise<number> {
+  if (repoId) {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM repositories WHERE id = ? AND user_id = ?',
+      [repoId, userId]
+    );
+    if (rows.length) return rows[0].id as number;
+  }
+
+  if (!fullName?.includes('/')) {
+    throw new Error('Repository not found. Analyze or connect the repo first.');
+  }
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    'SELECT id FROM repositories WHERE full_name = ? AND user_id = ?',
+    [fullName, userId]
+  );
+  if (existing.length) return existing[0].id as number;
+
+  const [owner, name] = fullName.split('/');
+  const structure = await getRepoStructure(githubToken, owner, name);
+  const [result] = await pool.execute<ResultSetHeader>(
+    `INSERT INTO repositories (user_id, owner, name, full_name, description, language, is_private, stars)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      owner,
+      name,
+      structure.full_name,
+      structure.description || null,
+      structure.language || null,
+      false,
+      structure.stars || 0,
+    ]
+  );
+  return result.insertId;
+}
 
 // POST /api/rag/index
 // Kicks off (or re-runs) indexing for a connected GitHub repo.
 export async function startIndex(req: Request, res: Response): Promise<void> {
-  const { repoId } = req.body as { repoId: number };
+  const { repoId, fullName } = req.body as { repoId?: number; fullName?: string };
   const userId = req.user!.id;
 
-  if (!repoId) {
-    res.status(400).json({ error: 'repoId is required' });
+  if (!repoId && !fullName) {
+    res.status(400).json({ error: 'repoId or fullName is required' });
     return;
   }
 
-  // Verify repo belongs to this user
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id, github_token FROM repositories r JOIN users u ON u.id = ? WHERE r.id = ? AND r.user_id = ?',
-    [userId, repoId, userId]
-  );
-
-  // Try fetching the token from the user record instead
   const [userRows] = await pool.execute<RowDataPacket[]>(
     'SELECT github_token FROM users WHERE id = ?',
     [userId]
@@ -34,8 +71,13 @@ export async function startIndex(req: Request, res: Response): Promise<void> {
 
   const githubToken = userRows[0].github_token;
 
-  const jobId = await ingestionService.startIndexing(repoId, userId, githubToken);
-  res.status(202).json({ jobId, message: 'Indexing started' });
+  try {
+    const dbRepoId = await resolveRepoId(userId, repoId, fullName, githubToken);
+    const jobId = await ingestionService.startIndexing(dbRepoId, userId, githubToken);
+    res.status(202).json({ jobId, repoId: dbRepoId, message: 'Indexing started' });
+  } catch (err) {
+    res.status(404).json({ error: (err as Error).message });
+  }
 }
 
 // GET /api/rag/jobs/:jobId
@@ -124,8 +166,8 @@ export async function deleteRepoIndex(req: Request, res: Response): Promise<void
 // Admin: seed or re-seed the OWASP corpus into ChromaDB.
 export async function seedOwasp(req: Request, res: Response): Promise<void> {
   try {
-    await owaspService.seedOwaspCorpus();
-    res.json({ success: true, message: 'OWASP corpus seeded successfully' });
+    await owaspService.ensureOwaspCorpusIndexed();
+    res.json({ success: true, message: 'OWASP corpus is ready' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -136,10 +178,11 @@ export async function seedOwasp(req: Request, res: Response): Promise<void> {
 export async function getOwaspStatus(req: Request, res: Response): Promise<void> {
   try {
     const chroma = (await import('../db/chroma')).default;
-    const collection = await chroma.getOrCreateCollection('owasp_top10');
+    const collection = await chroma.getOrCreateCollection('owasp_security');
     const count = await collection.count();
     res.json({ status: count > 0 ? 'ready' : 'empty', count });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('OWASP status check failed:', err);
+    res.json({ status: 'unavailable', count: 0, error: (err as Error).message });
   }
 }
