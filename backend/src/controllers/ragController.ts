@@ -1,61 +1,23 @@
 import { Request, Response } from 'express';
 import { ingestionService } from '../services/ingestionService';
 import { owaspService } from '../services/owaspService';
-import { getRepoStructure } from '../services/githubService';
+import { getRepoStructure, getRepoTree } from '../services/githubService';
 import pool from '../db/connection';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
-
-async function resolveRepoId(
-  userId: number,
-  repoId: number | undefined,
-  fullName: string | undefined,
-  githubToken: string
-): Promise<number> {
-  if (repoId) {
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      'SELECT id FROM repositories WHERE id = ? AND user_id = ?',
-      [repoId, userId]
-    );
-    if (rows.length) return rows[0].id as number;
-  }
-
-  if (!fullName?.includes('/')) {
-    throw new Error('Repository not found. Analyze or connect the repo first.');
-  }
-
-  const [existing] = await pool.execute<RowDataPacket[]>(
-    'SELECT id FROM repositories WHERE full_name = ? AND user_id = ?',
-    [fullName, userId]
-  );
-  if (existing.length) return existing[0].id as number;
-
-  const [owner, name] = fullName.split('/');
-  const structure = await getRepoStructure(githubToken, owner, name);
-  const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO repositories (user_id, owner, name, full_name, description, language, is_private, stars)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      userId,
-      owner,
-      name,
-      structure.full_name,
-      structure.description || null,
-      structure.language || null,
-      false,
-      structure.stars || 0,
-    ]
-  );
-  return result.insertId;
-}
 
 // POST /api/rag/index
 // Kicks off (or re-runs) indexing for a connected GitHub repo.
 export async function startIndex(req: Request, res: Response): Promise<void> {
-  const { repoId, fullName } = req.body as { repoId?: number; fullName?: string };
+  const { repoId, selectedPaths, owner, repoName } = req.body as {
+    repoId?: number;
+    selectedPaths?: string[];
+    owner?: string;
+    repoName?: string;
+  };
   const userId = req.user!.id;
 
-  if (!repoId && !fullName) {
-    res.status(400).json({ error: 'repoId or fullName is required' });
+  if (!repoId && !(owner && repoName)) {
+    res.status(400).json({ error: 'repoId, or owner and repoName, is required' });
     return;
   }
 
@@ -72,8 +34,44 @@ export async function startIndex(req: Request, res: Response): Promise<void> {
   const githubToken = userRows[0].github_token;
 
   try {
-    const dbRepoId = await resolveRepoId(userId, repoId, fullName, githubToken);
-    const jobId = await ingestionService.startIndexing(dbRepoId, userId, githubToken);
+    // Try to find repo by DB id first
+    let dbRepoRow: RowDataPacket | null = null;
+    if (repoId) {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        'SELECT id FROM repositories WHERE id = ? AND user_id = ?',
+        [repoId, userId]
+      );
+      if (rows.length) dbRepoRow = rows[0];
+    }
+
+    // Fallback: find by owner + name
+    let dbRepoId: number;
+    if (dbRepoRow) {
+      dbRepoId = dbRepoRow.id as number;
+    } else if (owner && repoName) {
+      // Try to find existing record
+      const [existing] = await pool.execute<RowDataPacket[]>(
+        'SELECT id FROM repositories WHERE owner = ? AND name = ? AND user_id = ?',
+        [owner, repoName, userId]
+      );
+      if (existing.length) {
+        dbRepoId = existing[0].id as number;
+      } else {
+        // Create the repo record
+        const [result] = await pool.execute<ResultSetHeader>(
+          `INSERT INTO repositories (user_id, owner, name, full_name)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE owner = VALUES(owner)`,
+          [userId, owner, repoName, `${owner}/${repoName}`]
+        );
+        dbRepoId = result.insertId;
+      }
+    } else {
+      res.status(400).json({ error: 'Could not resolve repository. Pass owner and repoName.' });
+      return;
+    }
+
+    const jobId = await ingestionService.startIndexing(dbRepoId, userId, githubToken, selectedPaths);
     res.status(202).json({ jobId, repoId: dbRepoId, message: 'Indexing started' });
   } catch (err) {
     res.status(404).json({ error: (err as Error).message });
@@ -84,7 +82,7 @@ export async function startIndex(req: Request, res: Response): Promise<void> {
 // Poll the in-memory job status for a running indexing task.
 export async function getJobStatus(req: Request, res: Response): Promise<void> {
   const { jobId } = req.params;
-  const job = ingestionService.getJobStatus(jobId);
+  const job = ingestionService.getJobStatus(jobId as string);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
     return;
@@ -162,14 +160,46 @@ export async function deleteRepoIndex(req: Request, res: Response): Promise<void
   res.json({ success: true, message: 'Index deleted' });
 }
 
+// GET /api/rag/filetree/:repoId
+// Returns the repository's file tree for the pre-indexing file picker.
+export async function getFileTree(req: Request, res: Response): Promise<void> {
+  const { owner, repo } = req.query as { owner?: string; repo?: string };
+
+  if (!owner || !repo) {
+    res.status(400).json({ error: 'owner and repo query params are required' });
+    return;
+  }
+
+  try {
+    const userId = req.user!.id;
+    const [userRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT github_token FROM users WHERE id = ?',
+      [userId]
+    );
+    const githubToken = userRows[0]?.github_token;
+
+    const tree = await getRepoTree(owner, repo, githubToken);
+
+    const totalFiles = tree.filter(n => n.type === 'blob').length;
+    const totalFolders = tree.filter(n => n.type === 'tree').length;
+
+    res.json({ tree, totalFiles, totalFolders });
+  } catch (err) {
+    console.error('getFileTree error:', err);
+    res.status(500).json({ error: 'Failed to fetch file tree' });
+  }
+}
+
 // POST /api/rag/owasp/seed
 // Admin: seed or re-seed the OWASP corpus into ChromaDB.
 export async function seedOwasp(req: Request, res: Response): Promise<void> {
   try {
-    await owaspService.ensureOwaspCorpusIndexed();
-    res.json({ success: true, message: 'OWASP corpus is ready' });
+    await owaspService.loadCorpus(true);
+    const entries = owaspService.getCount();
+    res.json({ success: true, entries });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('OWASP seed error:', err);
+    res.status(500).json({ error: 'Failed to seed OWASP corpus' });
   }
 }
 
