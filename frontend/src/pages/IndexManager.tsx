@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
+import FileTreePicker from '../components/FileTreePicker';
+import type { TreeNode } from '../types';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -78,8 +80,18 @@ export default function IndexManager() {
   const [activeJobs, setActiveJobs] = useState<Record<number, Job>>({});
   const [error, setError] = useState('');
   const [owaspStatus, setOwaspStatus] = useState<{ status: string; count: number } | null>(null);
-  const [seedingOwasp, setSeedingOwasp] = useState(false);
+  const [owaspSeeding, setOwaspSeeding] = useState(false);
+  const [owaspMessage, setOwaspMessage] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── File tree picker state ──
+  const [fileTree, setFileTree] = useState<TreeNode[] | null>(null);
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState('');
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [indexingSelected, setIndexingSelected] = useState(false);
+  const [pickingRepoId, setPickingRepoId] = useState<number | null>(null);
+  const [newRepoId, setNewRepoId] = useState<number | null>(null);
 
   // ── Restore persisted state ──
   const persisted = storageGet<IndexPersistedState>('index');
@@ -97,9 +109,105 @@ export default function IndexManager() {
     storageClear('index');
     setSelectedRepoId(null);
     setRestoredAt(null);
+    setFileTree(null);
+    setTreeError('');
+    setSelectedPaths(new Set());
   }
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  async function loadFileTree(repoId: number, owner: string, repoName: string) {
+    setTreeLoading(true);
+    setTreeError('');
+    setFileTree(null);
+
+    const cacheKey = `codex_index_tree_${repoId}`;
+    try {
+      const cached = storageGet<{ tree: TreeNode[]; savedAt: number }>(cacheKey);
+      if (cached && Date.now() - cached.savedAt < 3600000) {
+        setFileTree(cached.tree);
+        setTreeLoading(false);
+        restoreSelection(repoId);
+        return;
+      }
+    } catch {}
+
+    try {
+      const res = await fetch(
+        `${API}/api/rag/filetree/${repoId}?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repoName)}`,
+        { headers }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to fetch file tree' }));
+        setTreeError(err.error || 'Failed to fetch file tree');
+        setTreeLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setFileTree(data.tree);
+
+      try {
+        storageSet(cacheKey, { tree: data.tree, savedAt: Date.now() });
+      } catch {}
+      restoreSelection(repoId);
+    } catch {
+      setTreeError('Network error fetching file tree');
+    } finally {
+      setTreeLoading(false);
+    }
+  }
+
+  function restoreSelection(repoId: number) {
+    try {
+      const saved = storageGet<string[]>(`codex_index_selection_${repoId}`);
+      if (saved && Array.isArray(saved)) {
+        setSelectedPaths(new Set(saved));
+      } else {
+        setSelectedPaths(new Set());
+      }
+    } catch {
+      setSelectedPaths(new Set());
+    }
+  }
+
+  function persistSelection(repoId: number, paths: Set<string>) {
+    try {
+      storageSet(`codex_index_selection_${repoId}`, [...paths]);
+    } catch {}
+  }
+
+  async function startSelectiveIndex(repoId: number, owner: string, repoName: string) {
+    setError('');
+    setIndexingSelected(true);
+    const pathsArray = [...selectedPaths];
+    try {
+      const res = await fetch(`${API}/api/rag/index`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ repoId, owner, repoName, selectedPaths: pathsArray }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || (res.status === 429 ? 'Rate limit reached — wait a moment and try again.' : 'Failed to start indexing'));
+        setIndexingSelected(false);
+        return;
+      }
+      setFileTree(null);
+      setSelectedPaths(new Set());
+      setPickingRepoId(null);
+      setNewRepoId(null);
+      setIndexingSelected(false);
+      pollJob(data.repoId ?? repoId, data.jobId);
+    } catch {
+      setError('Network error starting index');
+      setIndexingSelected(false);
+    }
+  }
+
+  function handleSelectionChange(newSelection: Set<string>) {
+    setSelectedPaths(newSelection);
+    const activeRepoId = pickingRepoId ?? newRepoId;
+    if (activeRepoId) persistSelection(activeRepoId, newSelection);
+  }
 
   async function loadData() {
     try {
@@ -165,19 +273,23 @@ export default function IndexManager() {
     } catch {}
   }
 
-  async function seedOwasp() {
-    setSeedingOwasp(true);
+  async function handleSeedOwasp() {
+    setOwaspSeeding(true);
+    setOwaspMessage(null);
     try {
       const res = await fetch(`${API}/api/rag/owasp/seed`, { method: 'POST', headers });
-      await res.json();
+      const data = await res.json();
       if (res.ok) {
-        setTimeout(async () => {
-          const r = await fetch(`${API}/api/rag/owasp/status`, { headers });
-          if (r.ok) setOwaspStatus(await r.json());
-        }, 1000);
+        setOwaspMessage(`✓ Seeded successfully — ${data.entries} entries`);
+        const r = await fetch(`${API}/api/rag/owasp/status`, { headers });
+        if (r.ok) setOwaspStatus(await r.json());
+      } else {
+        setOwaspMessage(`✗ ${data.error ?? 'Seed failed'}`);
       }
+    } catch {
+      setOwaspMessage('✗ Network error');
     } finally {
-      setSeedingOwasp(false);
+      setOwaspSeeding(false);
     }
   }
 
@@ -298,6 +410,9 @@ export default function IndexManager() {
                   const val = e.target.value ? Number(e.target.value) : null;
                   setSelectedRepoId(val);
                   persist(val);
+                  setFileTree(null);
+                  setTreeError('');
+                  setSelectedPaths(new Set());
                 }}
                 style={{
                   flex: 1,
@@ -333,11 +448,154 @@ export default function IndexManager() {
                 </button>
               )}
             </div>
-            {restoredAt && selectedRepoId !== null && (
-              <p style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '-1.5rem', marginBottom: '2rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                // selection restored from {timeAgo(restoredAt)}
-              </p>
-            )}
+            {/* INDEX A NEW REPOSITORY */}
+            <div style={{
+              marginBottom: '2rem',
+              background: 'var(--bg-1)',
+              padding: '1rem',
+              border: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.75rem' }}>
+                // INDEX A NEW REPOSITORY
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <select
+                  value={newRepoId ?? ''}
+                  onChange={e => {
+                    const val = e.target.value ? Number(e.target.value) : null;
+                    setNewRepoId(val);
+                    setFileTree(null);
+                    setTreeError('');
+                    setSelectedPaths(new Set());
+                    setPickingRepoId(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem 0.75rem',
+                    background: 'var(--bg-2)',
+                    border: '1px solid var(--border-2)',
+                    color: 'var(--text-1)',
+                    fontSize: '0.75rem',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">Select a repository to index ▾</option>
+                  {unindexedRepos.map(r => (
+                    <option key={r.id} value={r.codex_repo_id ?? r.id}>{r.full_name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!newRepoId) return;
+                    const repo = unindexedRepos.find(r => (r.codex_repo_id ?? r.id) === newRepoId);
+                    if (!repo) return;
+                    const [owner, name] = repo.full_name.split('/');
+                    loadFileTree(newRepoId, owner, name);
+                  }}
+                  disabled={!newRepoId || treeLoading}
+                  className="btn-primary"
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.6875rem', opacity: !newRepoId || treeLoading ? 0.5 : 1 }}
+                >
+                  {treeLoading && newRepoId ? '// FETCHING FILE TREE...' : 'BROWSE FILES →'}
+                </button>
+              </div>
+
+              {treeError && (
+                <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: 'var(--red-dim)', border: '1px solid var(--red-border)' }}>
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--red)' }}>{treeError}</span>
+                </div>
+              )}
+
+              {/* FileTreePicker for new repo */}
+              {newRepoId && fileTree && (
+                <div style={{ marginTop: '1rem' }}>
+                  <FileTreePicker
+                    tree={fileTree}
+                    selected={selectedPaths}
+                    onChange={handleSelectionChange}
+                  />
+                  {/* Selection Summary Bar */}
+                  <div style={{
+                    background: 'var(--bg-1)',
+                    border: '1px solid var(--border)',
+                    borderTop: 'none',
+                    padding: '0.75rem 1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap',
+                  }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-1)', fontWeight: 600 }}>
+                      {selectedPaths.size} file{selectedPaths.size !== 1 ? 's' : ''} selected
+                    </span>
+                    <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      · {selectedPaths.size > 0 ? (() => {
+                        const secs = selectedPaths.size * 1.2;
+                        return secs > 60 ? `~${Math.round(secs / 60)} min estimated` : `~${Math.round(secs)} sec estimated`;
+                      })() : '—'}
+                    </span>
+                    <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      · {(() => {
+                        if (selectedPaths.size === 0) return 'no files selected';
+                        const folders = new Set<string>();
+                        for (const p of selectedPaths) {
+                          const segs = p.split('/');
+                          folders.add(segs.length > 1 ? segs[0] : '.');
+                        }
+                        if (folders.size === 1) return [...folders][0] + '/ only';
+                        return `${folders.size} folders selected`;
+                      })()}
+                    </span>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
+                      <button
+                        onClick={() => {
+                          if (!fileTree) return;
+                          const all = new Set<string>();
+                          for (const n of fileTree) {
+                            if (n.type === 'blob') all.add(n.path);
+                          }
+                          handleSelectionChange(all);
+                        }}
+                        className="btn-ghost"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.6rem' }}
+                      >
+                        [SELECT ALL]
+                      </button>
+                      <button
+                        onClick={() => handleSelectionChange(new Set())}
+                        className="btn-ghost"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.6rem' }}
+                      >
+                        [NONE]
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <button
+                      onClick={() => {
+                        if (!newRepoId) return;
+                        const repo = unindexedRepos.find(r => (r.codex_repo_id ?? r.id) === newRepoId);
+                        if (!repo) return;
+                        const [owner, name] = repo.full_name.split('/');
+                        startSelectiveIndex(newRepoId, owner, name);
+                      }}
+                      disabled={selectedPaths.size === 0 || indexingSelected}
+                      className="btn-primary"
+                      style={{
+                        padding: '0.625rem 1.25rem',
+                        fontSize: '0.6875rem',
+                        opacity: selectedPaths.size === 0 || indexingSelected ? 0.4 : 1,
+                        cursor: selectedPaths.size === 0 || indexingSelected ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {indexingSelected ? 'INDEXING...' : 'INDEX SELECTED FILES →'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {filteredIndexedRepos.length > 0 && (
               <div style={{ marginBottom: '2.5rem' }}>
@@ -364,7 +622,11 @@ export default function IndexManager() {
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             {repo.language && <span className="tag">{repo.language}</span>}
                             <button
-                              onClick={() => startIndex(repo.repo_id)}
+                              onClick={() => {
+                                setPickingRepoId(repo.repo_id);
+                                setNewRepoId(null);
+                                loadFileTree(repo.repo_id, repo.owner, repo.name);
+                              }}
                               disabled={!!isRunning}
                               className="btn-ghost"
                               style={{ padding: '0.25rem 0.625rem', fontSize: '0.6rem', opacity: isRunning ? 0.5 : 1 }}
@@ -404,14 +666,90 @@ export default function IndexManager() {
                           </p>
                         )}
 
-                        <PipelineBar job={isRunning ? job : undefined} repoStatus={repo.status} />
-
-                        {repo.status === 'ready' && (
-                          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
-                            <Link to="/chat" className="btn-ghost" style={{ padding: '0.375rem 0.75rem', fontSize: '0.6rem' }}>
-                              Chat with repo →
-                            </Link>
+                        {/* FileTreePicker inline when picking */}
+                        {pickingRepoId === repo.repo_id ? (
+                          <div style={{ marginTop: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                {treeLoading ? '// FETCHING FILE TREE...' : '// SELECT FILES TO INDEX'}
+                              </span>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                  onClick={() => {
+                                    setPickingRepoId(null);
+                                    setFileTree(null);
+                                    setSelectedPaths(new Set());
+                                  }}
+                                  className="btn-ghost"
+                                  style={{ padding: '0.25rem 0.625rem', fontSize: '0.6rem' }}
+                                >
+                                  CANCEL
+                                </button>
+                                <button
+                                  onClick={() => startSelectiveIndex(repo.repo_id, repo.owner, repo.name)}
+                                  disabled={selectedPaths.size === 0 || indexingSelected}
+                                  className="btn-primary"
+                                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.6rem', opacity: selectedPaths.size === 0 || indexingSelected ? 0.4 : 1 }}
+                                >
+                                  START INDEX →
+                                </button>
+                              </div>
+                            </div>
+                            {treeLoading ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '2rem 1rem' }}>
+                                <div className="loader" style={{ width: '12px', height: '12px' }} />
+                                <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                  // FETCHING FILE TREE...
+                                </span>
+                              </div>
+                            ) : fileTree ? (
+                              <>
+                                <FileTreePicker
+                                  tree={fileTree}
+                                  selected={selectedPaths}
+                                  onChange={handleSelectionChange}
+                                />
+                                <div style={{
+                                  background: 'var(--bg-1)',
+                                  border: '1px solid var(--border)',
+                                  borderTop: 'none',
+                                  padding: '0.75rem 1rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.75rem',
+                                  flexWrap: 'wrap',
+                                }}>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-1)', fontWeight: 600 }}>
+                                    {selectedPaths.size} file{selectedPaths.size !== 1 ? 's' : ''} selected
+                                  </span>
+                                  <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                    · {selectedPaths.size > 0 ? (() => {
+                                      const secs = selectedPaths.size * 1.2;
+                                      return secs > 60 ? `~${Math.round(secs / 60)} min estimated` : `~${Math.round(secs)} sec estimated`;
+                                    })() : '—'}
+                                  </span>
+                                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
+                                    <button onClick={() => { if (!fileTree) return; const all = new Set<string>(); for (const n of fileTree) { if (n.type === 'blob') all.add(n.path); } handleSelectionChange(all); }} className="btn-ghost" style={{ padding: '0.25rem 0.5rem', fontSize: '0.6rem' }}>[ALL]</button>
+                                    <button onClick={() => handleSelectionChange(new Set())} className="btn-ghost" style={{ padding: '0.25rem 0.5rem', fontSize: '0.6rem' }}>[NONE]</button>
+                                  </div>
+                                </div>
+                              </>
+                            ) : treeError ? (
+                              <p style={{ fontSize: '0.75rem', color: '#f87171' }}>{treeError}</p>
+                            ) : null}
                           </div>
+                        ) : (
+                          <>
+                            <PipelineBar job={isRunning ? job : undefined} repoStatus={repo.status} />
+
+                            {repo.status === 'ready' && (
+                              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
+                                <Link to="/chat" className="btn-ghost" style={{ padding: '0.375rem 0.75rem', fontSize: '0.6rem' }}>
+                                  Chat with repo →
+                                </Link>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     );
@@ -495,13 +833,34 @@ export default function IndexManager() {
                 </p>
               )}
               <button
-                onClick={seedOwasp}
-                disabled={seedingOwasp}
-                className="btn-ghost"
-                style={{ width: '100%', justifyContent: 'center', fontSize: '0.6rem', opacity: seedingOwasp ? 0.5 : 1 }}
+                onClick={handleSeedOwasp}
+                disabled={owaspSeeding}
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: '1px solid var(--border-2)',
+                  color: owaspSeeding ? 'var(--text-3)' : 'var(--text-1)',
+                  fontFamily: 'var(--font)',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  padding: '8px 16px',
+                  cursor: owaspSeeding ? 'not-allowed' : 'pointer',
+                  transition: 'border-color 0.15s',
+                }}
               >
-                {seedingOwasp ? 'Seeding...' : 'Re-seed OWASP'}
+                {owaspSeeding ? '// SEEDING...' : 'RE-SEED OWASP'}
               </button>
+              {owaspMessage && (
+                <p style={{
+                  fontSize: '11px',
+                  marginTop: '8px',
+                  color: owaspMessage.startsWith('✓') ? 'var(--green-text)' : '#ef4444',
+                }}>
+                  {owaspMessage}
+                </p>
+              )}
             </div>
 
             {/* How it works */}
