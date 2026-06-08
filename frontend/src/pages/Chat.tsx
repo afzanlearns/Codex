@@ -534,7 +534,25 @@ export default function Chat() {
             </button>
           )}
         </div>
-        <div style={{ maxWidth: '860px', margin: '0.5rem auto 0', display: 'flex', gap: '1rem' }}>
+        <div style={{ maxWidth: '860px', margin: '0.5rem auto 0', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {selectedRepo && (() => {
+            try {
+              const indexed = storageGet<string[]>(`codex_index_selection_${selectedRepo.repo_id}`);
+              if (indexed && indexed.length > 0 && indexed.length < 1000) {
+                const folders = [...new Set(indexed.map((p: string) => p.split('/').slice(0, -1).join('/') || '.'))];
+                const label = `${indexed.length} FILES INDEXED · ${folders.slice(0, 3).map((f: string) => f + '/').join(' · ')}${folders.length > 3 ? ' · …' : ''}`;
+                return (
+                  <span
+                    title="Only indexed files are searchable. Re-index from Index Manager to add more files."
+                    style={{ fontSize: '10px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'help' }}
+                  >
+                    {label}
+                  </span>
+                );
+              }
+            } catch {}
+            return null;
+          })()}
           <span style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
             Hybrid BM25 + Semantic retrieval
           </span>
