@@ -1,7 +1,8 @@
+import { Octokit } from 'octokit';
 import pool from '../db/connection';
 import chroma from '../db/chroma';
 import embeddingService from './embeddingService';
-import { getRepoStructure } from './githubService';
+import { getRepoStructure, getRepoTree } from './githubService';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
@@ -46,7 +47,7 @@ class IngestionService {
     return this.jobs.get(jobId) || null;
   }
 
-  async startIndexing(repoId: number, userId: number, githubToken: string): Promise<string> {
+  async startIndexing(repoId: number, userId: number, githubToken: string, selectedPaths?: string[]): Promise<string> {
     const jobId = uuidv4();
     const job: IndexJob = {
       jobId,
@@ -65,7 +66,7 @@ class IngestionService {
     this.jobs.set(jobId, job);
 
     // Start async runner
-    this.runIndexingJob(job, githubToken).catch(err => {
+    this.runIndexingJob(job, githubToken, selectedPaths).catch(err => {
       console.error(`Error in indexing job ${jobId}:`, err);
       job.status = 'failed';
       job.error = err.message || 'Unknown error';
@@ -95,7 +96,7 @@ class IngestionService {
     }
   }
 
-  private async runIndexingJob(job: IndexJob, githubToken: string) {
+  private async runIndexingJob(job: IndexJob, githubToken: string, selectedPaths?: string[]) {
     const startedMs = Date.now();
     job.status = 'parsing';
 
@@ -108,19 +109,44 @@ class IngestionService {
 
     await this.updateDbStatus(job.repoId, job.userId, 'indexing');
 
-    // 2. Fetch Code Files (Utilize existing githubService with custom handling for all files up to 200)
+    // 2. Fetch Code Files
     console.log(`Ingestion: Fetching file structure for ${owner}/${name}...`);
-    const structure = await getRepoStructure(githubToken, owner, name);
-    
-    // Filter to only text files that are source code
-    const allFiles = structure.sampled_files.map(sf => ({
-      path: sf.path,
-      type: 'file' as const,
-      size: sf.size,
-      content: sf.content
-    }));
 
-    job.progress.totalFiles = allFiles.length;
+    let allFiles: { path: string; type: 'file'; size: number; content: string }[] = [];
+
+    if (selectedPaths && selectedPaths.length > 0) {
+      // Selective indexing: fetch full tree, filter by selected paths, then fetch content
+      const tree = await getRepoTree(owner, name, githubToken);
+      const selectedSet = new Set(selectedPaths);
+      const filteredTree = tree.filter(n => n.type === 'blob' && selectedSet.has(n.path));
+      job.progress.totalFiles = filteredTree.length;
+
+      const gh = new Octokit({ auth: githubToken });
+      const { data: repoData } = await gh.rest.repos.get({ owner, repo: name });
+      const branch = repoData.default_branch;
+
+      for (const node of filteredTree) {
+        try {
+          const { data: fd } = await gh.rest.repos.getContent({ owner, repo: name, path: node.path, ref: branch });
+          if ('content' in fd && typeof fd.content === 'string') {
+            const decoded = Buffer.from(fd.content, 'base64').toString('utf-8');
+            if (!decoded.includes('\x00')) {
+              allFiles.push({ path: node.path, type: 'file', size: node.size || 0, content: decoded.slice(0, 2000) });
+            }
+          }
+        } catch { /* skip inaccessible files */ }
+      }
+    } else {
+      // Full indexing: use existing smart-sampling behavior
+      const structure = await getRepoStructure(githubToken, owner, name);
+      allFiles = structure.sampled_files.map(sf => ({
+        path: sf.path,
+        type: 'file' as const,
+        size: sf.size,
+        content: sf.content
+      }));
+      job.progress.totalFiles = allFiles.length;
+    }
     job.status = 'chunking';
 
     // 3. Parse and Chunk
