@@ -141,3 +141,10 @@ export interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
 }
+
+export interface TreeNode {
+  path: string;
+  type: 'blob' | 'tree';
+  size?: number;
+  sha: string;
+}

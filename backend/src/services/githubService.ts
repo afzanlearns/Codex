@@ -196,6 +196,38 @@ export async function getUserRepos(accessToken: string): Promise<unknown[]> {
   }));
 }
 
+export interface TreeNode {
+  path: string;
+  type: 'blob' | 'tree';
+  size?: number;
+  sha: string;
+}
+
+export async function getRepoTree(
+  owner: string,
+  repo: string,
+  token?: string
+): Promise<TreeNode[]> {
+  const octokit = new Octokit({ auth: token });
+  const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
+  const { data: tree } = await octokit.rest.git.getTree({
+    owner,
+    repo,
+    tree_sha: repoData.default_branch,
+    recursive: 'true',
+  });
+
+  return (tree.tree || [])
+    .filter((item: any) => item.path && item.type)
+    .filter((item: any) => !shouldSkipPath(item.path!))
+    .map((item: any) => ({
+      path: item.path!,
+      type: item.type as 'blob' | 'tree',
+      size: item.size,
+      sha: item.sha!,
+    }));
+}
+
 export async function getRepoStructure(
   accessToken: string,
   owner: string,
