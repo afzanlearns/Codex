@@ -27,6 +27,7 @@ import {
   deleteRepoIndex,
   seedOwasp,
   getOwaspStatus,
+  getFileTree,
 } from './controllers/ragController';
 
 // Controllers — Codebase Chat (Phase 4: new)
@@ -109,7 +110,9 @@ app.post('/api/github/analyze-public',                              ah(analyzePu
 // DELETE /api/rag/repos/:repoId      — delete an index
 // POST  /api/rag/owasp/seed          — (re)seed OWASP corpus
 // GET   /api/rag/owasp/status        — check OWASP corpus
+// GET   /api/rag/filetree/:repoId  — get repo file tree for file picker
 app.post('/api/rag/index',                 authenticate, indexLimiter, ah(startIndex));
+app.get('/api/rag/filetree/:repoId',       authenticate, ah(getFileTree));
 app.get('/api/rag/jobs/:jobId',            authenticate, ah(getJobStatus));
 app.get('/api/rag/repos',                  authenticate, ah(getAllRepoIndexStatuses));
 app.get('/api/rag/repos/:repoId/status',   authenticate, ah(getRepoIndexStatus));
