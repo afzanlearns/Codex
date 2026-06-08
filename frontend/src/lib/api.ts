@@ -88,4 +88,20 @@ export const api = {
     installWebhook: (repoId: number) =>
       request<unknown>('/webhooks/install', { method: 'POST', body: JSON.stringify({ repoId }) }),
   },
+  rag: {
+    getFileTree: (repoId: number | string, owner: string, repo: string) =>
+      request<{ tree: import('../types').TreeNode[]; totalFiles: number; totalFolders: number }>(
+        `/rag/filetree/${repoId}?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`
+      ),
+    startIndex: (body: {
+      repoId?: number;
+      owner: string;
+      repoName: string;
+      selectedPaths?: string[];
+    }) =>
+      request<{ jobId: string; repoId: number; message: string }>('/rag/index', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
 };
