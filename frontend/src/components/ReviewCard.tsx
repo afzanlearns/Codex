@@ -5,7 +5,7 @@ const SEV_CONFIG = {
   info:     { dot: 'bg-blue-400/70',   label: 'Info',     text: 'text-blue-300' },
   low:      { dot: 'bg-teal-400/70',   label: 'Low',      text: 'text-teal-300' },
   medium:   { dot: 'bg-amber-400/70',  label: 'Medium',   text: 'text-amber-300' },
-  high:     { dot: 'bg-orange-400/70', label: 'High',     text: 'text-orange-300' },
+  high:     { dot: 'bg-amber-500/60',  label: 'High',     text: 'text-amber-300' },
   critical: { dot: 'bg-red-400/70',    label: 'Critical', text: 'text-red-300' },
 };
 

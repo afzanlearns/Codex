@@ -86,7 +86,7 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   return (
     <div style={{
       background: 'var(--bg-1)',
-      border: '1px solid rgba(255,255,255,0.07)',
+      border: '1px solid var(--border)',
       borderRadius: 0,
       padding: '1.25rem',
       ...style,
@@ -271,8 +271,8 @@ export default function Playground() {
     fontWeight: 500,
     cursor: 'pointer',
     border: 'none',
-    background: active ? 'var(--red-dim)' : 'transparent',
-    color: active ? '#ef4444' : 'rgba(255,255,255,0.35)',
+    background: active ? 'var(--brand-soft)' : 'transparent',
+    color: active ? 'var(--brand-text)' : 'var(--text-3)',
     transition: 'all 0.2s',
   });
 
@@ -285,7 +285,7 @@ export default function Playground() {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
               <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Playground</p>
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-1)', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>
                 No account needed · Llama 3.3 70B · OWASP-grounded security · Results stored in MySQL
               </p>
@@ -335,7 +335,7 @@ export default function Playground() {
               flexDirection: 'column',
               flex: 1,
               background: 'var(--bg-1)',
-              border: '1px solid rgba(255,255,255,0.07)',
+              border: '1px solid var(--border)',
               borderRadius: 0,
               overflow: 'hidden',
             }}>
@@ -343,8 +343,8 @@ export default function Playground() {
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '0.75rem 1rem',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                background: 'rgba(0,0,0,0.2)',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--bg-2)',
               }}>
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   {['#f87171','#fbbf24','#34d399'].map(c => (
@@ -355,8 +355,8 @@ export default function Playground() {
                   value={language}
                   onChange={e => handleLanguageChange(e.target.value)}
                   style={{
-                    background: 'var(--bg-2)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--border-2)',
                     borderRadius: 0,
                     color: 'var(--text-2)',
                     fontSize: '0.75rem',
@@ -366,7 +366,7 @@ export default function Playground() {
                   }}
                 >
                   {LANGUAGES.map(l => (
-                    <option key={l} value={l} style={{ background: '#111' }}>{l}</option>
+                    <option key={l} value={l} style={{ background: 'var(--bg-1)', color: 'var(--text-1)' }}>{l}</option>
                   ))}
                 </select>
               </div>
@@ -384,7 +384,7 @@ export default function Playground() {
                   background: 'transparent', resize: 'vertical',
                   outline: 'none', border: 'none',
                   fontFamily: 'ui-monospace, "Cascadia Code", monospace',
-                  fontSize: '0.8125rem', color: 'rgba(255,255,255,0.75)',
+                  fontSize: '0.8125rem', color: 'var(--text-1)',
                   padding: '1.25rem', lineHeight: '1.7',
                   boxSizing: 'border-box',
                 }}
@@ -394,8 +394,8 @@ export default function Playground() {
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '0.75rem 1rem',
-                borderTop: '1px solid rgba(255,255,255,0.06)',
-                background: 'rgba(0,0,0,0.15)',
+                borderTop: '1px solid var(--border)',
+                background: 'var(--bg-2)',
               }}>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-3)', "fontFamily": "'Geist Mono', monospace" }}>
                   {code.length > 0 ? `${code.length.toLocaleString()} chars · ${code.split('\n').length} lines` : 'ready'}
@@ -408,14 +408,14 @@ export default function Playground() {
                     padding: '0.6rem 1.375rem',
                     background: loading ? 'var(--accent-dim)' : 'var(--red)',
                     border: 'none', borderRadius: 0,
-                    color: '#fff', fontSize: '0.8125rem', fontWeight: 500,
+                    color: 'var(--text-on-accent)', fontSize: '0.8125rem', fontWeight: 500,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s',
                   }}
                 >
                   {loading ? (
                     <>
-                      <span style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                      <span className="loader" style={{ width: '12px', height: '12px' }} />
                       Analyzing…
                     </>
                   ) : (
@@ -542,8 +542,8 @@ export default function Playground() {
                     { label: 'Smells',      value: review.metrics?.code_smell_count ?? 0, color: (review.metrics?.code_smell_count ?? 0) > 3 ? '#fbbf24' : undefined },
                     { label: 'Sec Issues',  value: review.metrics?.security_issue_count ?? 0, color: (review.metrics?.security_issue_count ?? 0) > 0 ? '#f87171' : undefined },
                   ].map(m => (
-                    <div key={m.label} style={{ background: 'var(--bg-1)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0, padding: '0.75rem', textAlign: 'center' }}>
-                      <p style={{ fontSize: '1rem', fontWeight: 600, color: m.color ?? '#fff', margin: '0 0 0.2rem' }}>{m.value}</p>
+                    <div key={m.label} style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0, padding: '0.75rem', textAlign: 'center' }}>
+                      <p style={{ fontSize: '1rem', fontWeight: 600, color: m.color ?? 'var(--text-1)', margin: '0 0 0.2rem' }}>{m.value}</p>
                       <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{m.label}</p>
                     </div>
                   ))}
@@ -562,7 +562,7 @@ export default function Playground() {
                 </Card>
 
                 {/* ── Tabs ── */}
-                <div style={{ display: 'flex', gap: '0.25rem', padding: '0.25rem', background: 'var(--bg-1)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 0 }}>
+                <div style={{ display: 'flex', gap: '0.25rem', padding: '0.25rem', background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 0 }}>
                   {([
                     { key: 'overview',     label: 'Overview' },
                     { key: 'issues',       label: `Issues (${review.comments.length})` },
@@ -594,7 +594,7 @@ export default function Playground() {
                               <span style={{ color: '#34d399', marginTop: '0.2rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                               </span>
-                              <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.5 }}>{s}</p>
+                              <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>{s}</p>
                             </div>
                           ))}
                         </div>
@@ -632,11 +632,11 @@ export default function Playground() {
                                 </span>
                               </div>
                               {expandedIssue === i && (
-                                <div style={{ padding: '0.875rem 1rem', background: 'rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                                <div style={{ padding: '0.875rem 1rem', background: 'var(--bg-2)', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                                   <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', margin: 0, lineHeight: 1.55 }}>{issue.explanation}</p>
                                   <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.12)', borderRadius: 0, padding: '0.625rem 0.875rem' }}>
                                     <p style={{ fontSize: '0.65rem', color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 0.375rem' }}>Impact if ignored</p>
-                                    <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)', margin: 0 }}>{issue.impact}</p>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', margin: 0 }}>{issue.impact}</p>
                                   </div>
                                   <div style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.12)', borderRadius: 0, padding: '0.625rem 0.875rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
@@ -646,7 +646,7 @@ export default function Playground() {
                                         style={{ background: 'rgba(52,211,153,0.15)', border: 'none', borderRadius: '4px', color: '#34d399', fontSize: '0.6rem', padding: '0.2rem 0.4rem', cursor: 'pointer' }}
                                       >Copy</button>
                                     </div>
-                                    <pre style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', margin: 0, whiteSpace: 'pre-wrap', "fontFamily": "'Geist Mono', monospace", lineHeight: 1.5 }}>{issue.fix}</pre>
+                                    <pre style={{ fontSize: '0.75rem', color: 'var(--text-2)', margin: 0, whiteSpace: 'pre-wrap', "fontFamily": "'Geist Mono', monospace", lineHeight: 1.5 }}>{issue.fix}</pre>
                                   </div>
                                 </div>
                               )}
@@ -690,7 +690,7 @@ export default function Playground() {
                               </div>
                               <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                                 {c.categories.slice(0, 2).map(cat => (
-                                  <span key={cat} style={{ fontSize: '0.6rem', padding: '0.15rem 0.5rem', borderRadius: 0, background: 'var(--bg-2)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                  <span key={cat} style={{ fontSize: '0.6rem', padding: '0.15rem 0.5rem', borderRadius: 0, background: 'var(--bg-2)', border: '1px solid var(--border-2)', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                                     {cat}
                                   </span>
                                 ))}
@@ -700,7 +700,7 @@ export default function Playground() {
                             {c.suggestion && expandedIssue === i + 1000 && (
                               <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${sev.border}` }}>
                                 <p style={{ fontSize: '0.65rem', color: sev.color, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 0.375rem' }}>Suggestion</p>
-                                <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.55 }}>{c.suggestion}</p>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', margin: 0, lineHeight: 1.55 }}>{c.suggestion}</p>
                               </div>
                             )}
                             {c.suggestion && expandedIssue !== i + 1000 && (
@@ -730,7 +730,7 @@ export default function Playground() {
                             <span style={{ width: '1.5rem', height: '1.5rem', borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>
                               {i + 1}
                             </span>
-                            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'rgba(255,255,255,0.75)', margin: 0 }}>{imp.title}</p>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-1)', margin: 0 }}>{imp.title}</p>
                           </div>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', margin: '0 0 0.875rem', lineHeight: 1.55 }}>{imp.explanation}</p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
@@ -766,7 +766,7 @@ export default function Playground() {
                           { label: 'Language',            value: language },
                           { label: 'Model',               value: 'Llama 3.3 70B (Groq)' },
                         ].map(row => (
-                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border)' }}>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>{row.label}</span>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-2)', "fontFamily": "'Geist Mono', monospace" }}>{String(row.value)}</span>
                           </div>
@@ -836,7 +836,7 @@ export default function Playground() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        textarea::placeholder { color: rgba(255,255,255,0.12); }
+        textarea::placeholder { color: var(--text-3); }
         * { box-sizing: border-box; }
       `}</style>
     </div>

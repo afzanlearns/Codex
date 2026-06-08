@@ -332,7 +332,7 @@ export default function IndexManager() {
                   {active && (
                     <div style={{
                       position: 'absolute', top: 0, left: 0, height: '100%', width: '40%',
-                      background: 'rgba(255,107,26,0.5)',
+                      background: 'rgba(46, 27, 156, 0.5)',
                       animation: 'shimmer 1.2s ease-in-out infinite',
                     }} />
                   )}

@@ -58,15 +58,15 @@ function SourceBadge({ source }: { source: Source }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
         padding: '0.15rem 0.5rem',
-        background: source.corpusName === 'review_memory' ? 'rgba(255,107,26,0.08)' : 'var(--bg-3)',
-        border: `1px solid ${source.corpusName === 'review_memory' ? 'var(--red-border)' : 'var(--border-2)'}`,
+        background: source.corpusName === 'review_memory' ? 'var(--brand-soft)' : 'var(--bg-3)',
+        border: `1px solid ${source.corpusName === 'review_memory' ? 'var(--brand-border)' : 'var(--border-2)'}`,
         fontSize: '0.6rem', color: 'var(--text-2)',
         textTransform: 'uppercase', letterSpacing: '0.08em',
         cursor: 'default', maxWidth: '180px',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ fontSize: '0.5rem', color: 'var(--red)' }}>{source.sourceId}</span>
+      <span style={{ fontSize: '0.5rem', color: 'var(--brand-text)' }}>{source.sourceId}</span>
       {source.displayLabel}
     </span>
   );

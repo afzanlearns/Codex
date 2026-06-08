@@ -144,7 +144,7 @@ export default function Landing() {
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                 <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', width: '5.5rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</span>
                 <div className="score-track" style={{ flex: 1 }}>
-                  <div className="score-fill" style={{ width: `${item.pct}%`, background: 'var(--red)' }} />
+                  <div className="score-fill" style={{ width: `${item.pct}%` }} />
                 </div>
                 <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-1)', width: '2rem', textAlign: 'right' }}>{item.score}</span>
               </div>
@@ -324,7 +324,7 @@ export default function Landing() {
       </section>
 
       {/* ── CTA ───────────────────────────────────────────────── */}
-      <section style={{ background: 'var(--red)', padding: '4rem 1.5rem', textAlign: 'center' }}>
+      <section style={{ background: 'linear-gradient(135deg, #24157A 0%, #2E1B9C 50%, #4330B5 100%)', padding: '4rem 1.5rem', textAlign: 'center' }}>
         <p className="label" style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>// No setup required</p>
         <h2 style={{ fontSize: 'clamp(1.75rem, 4vw, 3rem)', fontWeight: 700, color: '#fff', marginBottom: '2rem', letterSpacing: '-0.02em' }}>
           Index once. Understand everything.
@@ -334,7 +334,9 @@ export default function Landing() {
             Open playground
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </Link>
-          <Link to={isAuthenticated ? "/chat" : "/register"} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s' }}>
+          <Link to={isAuthenticated ? "/chat" : "/register"} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s, background 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--brand-soft)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             {isAuthenticated ? 'Chat with codebase' : 'Get started'}
           </Link>
         </div>
