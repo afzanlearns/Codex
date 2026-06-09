@@ -4,6 +4,10 @@ import { owaspService } from '../services/owaspService';
 import { getRepoStructure, getRepoTree } from '../services/githubService';
 import pool from '../db/connection';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { Octokit } from 'octokit';
+import chroma from '../db/chroma';
+import embeddingService from '../services/embeddingService';
+import crypto from 'crypto';
 
 // POST /api/rag/index
 // Kicks off (or re-runs) indexing for a connected GitHub repo.
@@ -187,6 +191,186 @@ export async function getFileTree(req: Request, res: Response): Promise<void> {
   } catch (err) {
     console.error('getFileTree error:', err);
     res.status(500).json({ error: 'Failed to fetch file tree' });
+  }
+}
+
+// POST /api/rag/index-public
+// Index ANY public GitHub repository without requiring authentication
+export async function indexPublicRepo(req: Request, res: Response): Promise<void> {
+  const { owner, repoName, url } = req.body as { owner?: string; repoName?: string; url?: string };
+
+  let resolvedOwner = owner || '';
+  let resolvedRepo = repoName || '';
+
+  if (url) {
+    const clean = url.trim().replace(/\.git$/, '');
+    const match = clean.match(/(?:github\.com\/)?([^/\s]+)\/([^/\s]+)/);
+    if (!match) {
+      res.status(400).json({ error: 'Invalid GitHub URL' });
+      return;
+    }
+    resolvedOwner = match[1];
+    resolvedRepo = match[2];
+  }
+
+  if (!resolvedOwner || !resolvedRepo) {
+    res.status(400).json({ error: 'owner and repoName (or url) are required' });
+    return;
+  }
+
+  try {
+    const octokit = new Octokit();
+    const { data: repoData } = await octokit.rest.repos.get({ owner: resolvedOwner, repo: resolvedRepo });
+    if (repoData.private) {
+      res.status(403).json({ error: 'This repository is private. Cannot index private repos without authentication.' });
+      return;
+    }
+
+    const collectionName = `codebase_public_${resolvedOwner}_${resolvedRepo}`;
+
+    // Check if already indexed
+    const [existing] = await pool.execute<RowDataPacket[]>(
+      'SELECT id, status, chunks_count, files_count FROM indexed_public_repos WHERE owner = ? AND repo_name = ?',
+      [resolvedOwner, resolvedRepo]
+    );
+
+    if (existing.length > 0 && existing[0].status === 'ready') {
+      res.json({
+        status: 'already_indexed',
+        repoId: existing[0].id,
+        owner: resolvedOwner,
+        repoName: resolvedRepo,
+        files_processed: existing[0].files_count,
+        chunks_created: existing[0].chunks_count,
+        collection_name: collectionName,
+      });
+      return;
+    }
+
+    // Insert or update pending status
+    let dbId: number;
+    if (existing.length > 0) {
+      dbId = existing[0].id;
+      await pool.execute(
+        'UPDATE indexed_public_repos SET status = ?, indexed_at = NOW() WHERE id = ?',
+        ['indexing', dbId]
+      );
+    } else {
+      const [result] = await pool.execute<ResultSetHeader>(
+        `INSERT INTO indexed_public_repos (owner, repo_name, github_url, chroma_collection_name, status, indexed_at)
+         VALUES (?, ?, ?, ?, 'indexing', NOW())`,
+        [resolvedOwner, resolvedRepo, repoData.html_url, collectionName]
+      );
+      dbId = result.insertId;
+    }
+
+    // Fetch structure and source files
+    const structure = await getRepoStructure('', resolvedOwner, resolvedRepo);
+    const allFiles = structure.sampled_files || [];
+
+    // Chunk files
+    const chunks: Array<{
+      chunkId: string;
+      text: string;
+      filePath: string;
+      startLine: number;
+      endLine: number;
+      language: string;
+      chunkType: string;
+    }> = [];
+
+    for (const file of allFiles) {
+      if (!file.content) continue;
+      const content = file.content;
+      const lines = content.split('\n');
+      const maxLines = 30;
+      const overlapLines = 4;
+
+      for (let i = 0; i < lines.length; i += (maxLines - overlapLines)) {
+        const slice = lines.slice(i, i + maxLines);
+        if (slice.length === 0) break;
+        const chunkText = slice.join('\n');
+        const hash = crypto.createHash('md5')
+          .update(`${collectionName}:${file.path}:${i + 1}`)
+          .digest('hex');
+
+        chunks.push({
+          chunkId: hash,
+          text: chunkText,
+          filePath: file.path,
+          startLine: i + 1,
+          endLine: Math.min(lines.length, i + maxLines),
+          language: file.path.split('.').pop()?.toLowerCase() || 'text',
+          chunkType: 'block',
+        });
+        if (i + maxLines >= lines.length) break;
+      }
+    }
+
+    // Delete existing collection and re-create
+    try {
+      await chroma.deleteCollection(collectionName);
+    } catch { /* may not exist */ }
+    const collection = await chroma.getOrCreateCollection(collectionName);
+
+    const batchSize = 32;
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      const ids = batch.map(c => c.chunkId);
+      const texts = batch.map(c => c.text);
+      const metadatas = batch.map(c => ({
+        filePath: c.filePath,
+        startLine: c.startLine,
+        endLine: c.endLine,
+        language: c.language,
+        chunkType: c.chunkType,
+        repoOwner: resolvedOwner,
+        repoName: resolvedRepo,
+      }));
+      const embeddings = await embeddingService.embed(texts);
+      await collection.upsert({ ids, embeddings, metadatas, documents: texts });
+    }
+
+    // Update DB status
+    await pool.execute(
+      `UPDATE indexed_public_repos
+       SET status = 'ready', files_count = ?, chunks_count = ?, completed_at = NOW()
+       WHERE id = ?`,
+      [allFiles.length, chunks.length, dbId]
+    );
+
+    res.json({
+      status: 'indexed',
+      repoId: dbId,
+      owner: resolvedOwner,
+      repoName: resolvedRepo,
+      files_processed: allFiles.length,
+      chunks_created: chunks.length,
+      collection_name: collectionName,
+    });
+  } catch (err: any) {
+    console.error('Index public repo error:', err);
+    if (err?.status === 404) {
+      res.status(404).json({ error: 'Repository not found or is private' });
+    } else {
+      res.status(500).json({ error: 'Failed to index public repo: ' + (err?.message || 'Unknown error') });
+    }
+  }
+}
+
+// GET /api/rag/index-public/repos
+// Returns all indexed public repos
+export async function getIndexedPublicRepos(req: Request, res: Response): Promise<void> {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT id, owner, repo_name, github_url, chroma_collection_name, files_count, chunks_count, status, indexed_at, completed_at
+       FROM indexed_public_repos
+       ORDER BY completed_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Get indexed public repos error:', err);
+    res.status(500).json({ error: 'Failed to fetch indexed public repos' });
   }
 }
 
