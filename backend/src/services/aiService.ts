@@ -9,8 +9,7 @@ const REVIEW_SYSTEM_PROMPT = `You are Codex, a world-class senior code reviewer 
 expertise in security, performance, and software architecture. You produce deeply 
 analytical, actionable code reviews.
 
-Your response MUST be valid JSON matching this EXACT structure — no markdown, no 
-preamble, just the JSON object:
+Return ONLY valid JSON. No markdown, no code fences, no preamble, no trailing text. Just the raw JSON object matching this EXACT structure:
 
 {
   "scores": {
@@ -176,15 +175,12 @@ export async function reviewCode(
   });
 
   const rawText = response.choices[0]?.message?.content || '';
-  const jsonText = rawText.replace(/```json\n?|\n?```/g, '').trim();
 
   let parsed: EnhancedAIReviewResult;
   try {
-    parsed = JSON.parse(jsonText) as EnhancedAIReviewResult;
-  } catch {
-    const match = jsonText.match(/\{[\s\S]*\}/);
-    if (match) parsed = JSON.parse(match[0]) as EnhancedAIReviewResult;
-    else throw new Error('Failed to parse AI response as JSON');
+    parsed = parseModelJson<EnhancedAIReviewResult>(rawText);
+  } catch (e) {
+    throw new Error('Failed to parse AI response as JSON: ' + (e instanceof Error ? e.message : ''));
   }
 
   parsed.ragContext = ragContext;
@@ -332,7 +328,7 @@ export async function analyzeCodebase(
 
   const prompt = `You are a senior software architect performing a deep codebase analysis based on system metadata and core entry files.
 Analyze this GitHub repository thoroughly based on the provided metadata and entry point contents.
-Return ONLY a valid JSON object — no markdown, no preamble, no trailing text.
+Return ONLY a valid JSON object — no markdown, no preamble, no trailing text, no code fences.
 
 REPOSITORY METADATA:
 - Name: ${structure.full_name}
@@ -358,7 +354,7 @@ ${JSON.stringify({
 CORE ENTRY FILE CONTENTS (${topEntryFiles.length} key files sampled):
 ${sampledFilesContent}
 
-Return this EXACT JSON structure — no markdown, no extra text, only JSON:
+Return this EXACT JSON structure — no markdown, no extra text, no code fences, only the raw JSON:
 {
   "scores": {
     "overall": <0-100 integer, weighted health score>,
