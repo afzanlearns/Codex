@@ -90,6 +90,24 @@ Submit code for refactoring analysis and receive prioritized recommendations wit
 ### Index Manager — Visible RAG Pipeline
 A real-time visualization of the full indexing pipeline: Parse → Chunk → Embed → Store → Done. See chunk counts, file processing speed, embedding model details, and corpus statistics across all three knowledge bases. The pipeline is not a black box — it is the product.
 
+### Selective File Indexing — Index Only What Matters
+Browse any repo's full file tree before indexing. Select specific files or entire folders. Index only what matters — service layer, auth module, or any subset you choose. Faster indexing, more accurate chat context.
+
+### Public Repository Support — Any Open Source Codebase
+Index and chat with ANY public GitHub repository — not just your own. Paste a URL like `github.com/facebook/react`, browse the file tree, select files, and ask questions about any open source codebase.
+
+### Smart Summarize (Quick Brief) — Instant Repo Insights
+One-click intelligent summary of any repository. Scores files by importance, selects the top 8–12, and returns a structured brief covering project overview, tech stack, architecture, health, security snapshot, and onboarding insights in under 15 seconds.
+
+### Project DNA — Idea Generation from Codebase Patterns
+Analyzes a repository's patterns, transferable skills, and domain essence, then generates 5–6 novel project ideas that share the same technical DNA. Each idea includes difficulty rating, impact score, what transfers directly, and what is new.
+
+### Code Health Segmentation — Visual File Health Map
+A visual file-level health map on the Repos analysis page. Files color-coded as Critical (red), Needs Attention (yellow), or Healthy (green) based on security findings and issue density. Filterable by health status.
+
+### State Persistence — Never Lose Context
+All page state — playground reviews, analyzed repos, chat conversations, index selections — persists across page refreshes. Nothing is lost until you click the Clear button. Every page has a dedicated Clear control.
+
 ---
 
 ## Architecture Overview
@@ -232,15 +250,21 @@ codex/
 │       │   ├── owaspService.ts       # OWASP corpus seeder
 │       │   ├── aiService.ts          # RAG-grounded LLM orchestration
 │       │   ├── generationService.ts  # Groq / vLLM abstraction layer
-│       │   └── githubService.ts      # File tree fetch, smart sampling
+│       │   ├── githubService.ts      # File tree fetch, smart sampling
+│       ├── utils/
+│       │   └── fileScorer.ts         # File importance scoring for Quick Brief
+│       ├── prompts/
+│       │   ├── briefPrompt.ts        # Smart Summarize LLM prompt
+│       │   └── dnaPrompt.ts          # Project DNA LLM prompt
 │       └── controllers/
 │           ├── authController.ts     # Register, login, GitHub OAuth
 │           ├── playgroundController.ts # Instant code review
 │           ├── repoController.ts     # Repo list, analysis
 │           ├── ragController.ts      # Index, job status, stats
 │           ├── chatController.ts     # SSE streaming chat
-│           └── refactorController.ts # Evidence-backed refactor
-│
+│           ├── refactorController.ts # Evidence-backed refactor
+│           └── dnaController.ts      # DNA generation endpoint
+
 └── frontend/
     ├── index.html
     ├── vite.config.ts
@@ -251,7 +275,8 @@ codex/
         ├── main.tsx                  # Entry point
         ├── index.css                 # Design system tokens + global styles
         ├── lib/
-        │   └── api.ts                # Typed API client
+        │   ├── api.ts                # Typed API client
+        │   └── storage.ts            # localStorage persistence helpers
         ├── types/
         │   └── index.ts              # Shared TypeScript types
         ├── hooks/
@@ -261,7 +286,8 @@ codex/
         │   ├── CitationPanel.tsx     # Expandable source citations
         │   ├── ScoreRing.tsx         # Animated SVG score ring
         │   ├── IndexStatusBadge.tsx  # Indexed / Indexing / Not indexed
-        │   └── ModeIndicator.tsx     # Local / H200 mode chip
+        │   ├── ModeIndicator.tsx     # Local / H200 mode chip
+        │   └── FileTreePicker.tsx    # Checkbox file tree with expand/collapse
         └── pages/
             ├── Landing.tsx           # Home — RAG narrative
             ├── Playground.tsx        # Code review + citation panel
@@ -480,6 +506,9 @@ VITE_API_URL=http://localhost:3001/api
 6. **Index it** — click "Index Repository" to enable Codebase Chat
 7. **Go to Chat** — ask questions about your codebase in plain English
 8. **Try Refactor** — paste code to get evidence-backed improvement suggestions
+9. **Index public repos** — paste any public GitHub URL in Index Manager to index third-party open source repositories
+10. **Quick Brief** — use Quick Brief on any analyzed repo for an instant structured summary
+11. **Project DNA** — use Project DNA to generate novel project ideas from any analyzed codebase
 
 ---
 
@@ -531,6 +560,7 @@ Show the architecture diagram. Map features to internship modules:
 | `POST` | `/api/playground/detect-language` | Auto-detect language | None |
 | `POST` | `/api/github/analyze-public` | Analyze any public GitHub repo | None |
 | `GET` | `/api/reviews/share/:slug` | Retrieve shared review by UUID | None |
+| `GET` | `/api/rag/public-filetree?owner=X&repo=Y` | File tree for any public repo | None |
 
 ### Protected Endpoints — Bearer JWT Required
 
@@ -555,6 +585,8 @@ Show the architecture diagram. Map features to internship modules:
 | `GET` | `/api/chat/sessions/:id` | Session messages |
 | `DELETE` | `/api/chat/sessions/:id` | Delete session |
 | `POST` | `/api/refactor` | Evidence-backed refactor analysis |
+| `GET` | `/api/repos/:repoId/brief` | Smart Summarize / Quick Brief |
+| `POST` | `/api/dna/generate` | Project DNA idea generation |
 
 ### Request / Response Examples
 
@@ -640,6 +672,9 @@ data: {"type":"done"}
 | `[Index Manager]` | Live pipeline visualization — Parse → Chunk → Embed → Store |
 | `[Refactor Intel]` | Before/after diff with OWASP + review memory evidence expanded |
 | `[Auth Page]` | Clean login with GitHub OAuth and email/password options |
+| `[Quick Brief]` | Structured repo summary output with scores and insights |
+| `[DNA Ideas]` | Project idea grid with difficulty, impact, and tech transfer mapping |
+| `[File Tree Picker]` | Checkbox file tree with folder expand/collapse and three-state selection |
 
 ---
 
@@ -733,6 +768,9 @@ LLM (Groq — Llama 3.3 70B)
 | Retrieval (BM25 + semantic + RRF) | ~200–400ms | Per query |
 | Playground review (full RAG) | ~4–7s | Retrieval + Groq generation |
 | Chat first token (TTFT) | ~2–3s | Retrieval + Groq stream start |
+| Quick Brief generation | < 15s | Top 8-12 files scored + Groq |
+| Project DNA generation | < 30s | Full analysis + Groq |
+| Public repo file tree | ~2-3s | GitHub git tree API |
 
 ### NVIDIA H200 Mode (unixcoder/codebert + vLLM)
 
@@ -748,6 +786,12 @@ Switching `EMBEDDING_MODEL=codebert` and `INFERENCE_MODE=vllm` on an NVIDIA H200
 ---
 
 ## Future Roadmap
+
+### Completed
+- [x] Selective file indexing with visual file tree picker
+- [x] Public repository indexing and chat
+- [x] Code health segmentation (per-file health heatmap)
+- [x] State persistence across page refreshes
 
 ### Near Term
 - [ ] Multi-repo chat — ask questions that span two repositories
