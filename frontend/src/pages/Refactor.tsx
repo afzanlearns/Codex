@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
+import { storageGet, storageSet, storageClear } from '../lib/storage';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-interface ChatableRepo {
+interface IndexedRepo {
   repo_id: number;
   name: string;
   full_name: string;
-  language: string;
+  status: string;
   chunk_count: number;
 }
 
@@ -109,12 +110,21 @@ function ImpactBadge({ label, value }: { label: string; value: string }) {
   );
 }
 
+interface RefactorPersistedState {
+  code: string;
+  language: string;
+  selectedRepoId: number | '';
+}
+
 export default function Refactor() {
   const { token } = useAuth();
-  const [repos, setRepos] = useState<ChatableRepo[]>([]);
-  const [selectedRepoId, setSelectedRepoId] = useState<number | ''>('');
-  const [code, setCode] = useState('');
-  const [language, setLanguage] = useState('typescript');
+  const [repos, setRepos] = useState<IndexedRepo[]>([]);
+
+  // ── Restore persisted state ──
+  const persisted = storageGet<RefactorPersistedState>('refactor');
+  const [selectedRepoId, setSelectedRepoId] = useState<number | ''>(persisted?.selectedRepoId ?? '');
+  const [code, setCode] = useState(persisted?.code ?? '');
+  const [language, setLanguage] = useState(persisted?.language ?? 'typescript');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RefactorResult | null>(null);
   const [error, setError] = useState('');
@@ -122,10 +132,17 @@ export default function Refactor() {
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
+  // ── Persistence ──
+  const persist = useCallback(() => {
+    storageSet('refactor', { code, language, selectedRepoId } as RefactorPersistedState);
+  }, [code, language, selectedRepoId]);
+
+  useEffect(() => { if (code) persist(); }, [code, language, selectedRepoId]);
+
   useEffect(() => {
-    fetch(`${API}/api/chat/repos`, { headers })
+    fetch(`${API}/api/rag/repos`, { headers })
       .then(r => r.ok ? r.json() : [])
-      .then(setRepos);
+      .then((data: IndexedRepo[]) => setRepos(data.filter(r => r.status === 'ready')));
   }, []);
 
   async function analyze() {
@@ -151,6 +168,18 @@ export default function Refactor() {
 
   const opp = result?.refactoring_opportunities?.[activeOppIdx];
 
+  function handleClear() {
+    storageClear('refactor');
+    setCode('');
+    setLanguage('typescript');
+    setSelectedRepoId('');
+    setResult(null);
+    setError('');
+    setActiveOppIdx(0);
+  }
+
+  const hasContent = !!code || !!result;
+
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100dvh', paddingTop: '52px' }}>
       <style>{`
@@ -160,19 +189,57 @@ export default function Refactor() {
 
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '3rem 1.5rem' }}>
         {/* Header */}
-        <div style={{ marginBottom: '2.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '2rem' }}>
-          <span className="label" style={{ display: 'block', marginBottom: '0.75rem' }}>// Refactor Intelligence</span>
-          <h1 className="heading" style={{ marginBottom: '0.75rem' }}>Evidence-backed refactoring</h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', maxWidth: '620px' }}>
-            Paste a code snippet. Codex retrieves similar patterns from your indexed codebase and past review findings,
-            then generates RAG-grounded refactoring recommendations with before/after diffs.
-          </p>
+        <div style={{ marginBottom: '2.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <span className="label" style={{ display: 'block', marginBottom: '0.75rem' }}>// Refactor Intelligence</span>
+            <h1 className="heading" style={{ marginBottom: '0.75rem' }}>Evidence-backed refactoring</h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', maxWidth: '620px' }}>
+              Paste a code snippet. Codex retrieves similar patterns from your indexed codebase and past review findings,
+              then generates RAG-grounded refactoring recommendations with before/after diffs.
+            </p>
+          </div>
+          {hasContent && (
+            <button
+              onClick={handleClear}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-3)',
+                fontFamily: 'var(--font)',
+                fontSize: '10px',
+                fontWeight: 500,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                padding: '4px 12px',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, color 0.15s',
+                flexShrink: 0,
+                marginTop: '0.25rem',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'var(--border-2)';
+                e.currentTarget.style.color = 'var(--text-2)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-3)';
+              }}
+            >
+              // Clear
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '1.5rem', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '1.5rem', alignItems: 'start' }}>
           {/* Left — Input panel */}
           <div>
             {/* Toolbar */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Add codebase context (optional)</p>
+              <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', marginBottom: '0.5rem' }}>
+                Select an indexed repo to ground the refactor suggestions in your actual codebase patterns. Leave empty to use OWASP standards only.
+              </p>
+            </div>
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem', alignItems: 'center' }}>
               <select
                 value={language}
