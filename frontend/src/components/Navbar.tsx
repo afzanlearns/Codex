@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 
 const NAV_LINKS = [
-  { label: 'Playground',     href: '/playground'     },
+  { label: 'Code Review',    href: '/review'         },
   { label: 'Chat',           href: '/chat'           },
   { label: 'Refactor',       href: '/refactor'       },
   { label: 'Index Manager',  href: '/index-manager'  },

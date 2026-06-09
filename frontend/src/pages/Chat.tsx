@@ -27,7 +27,7 @@ interface ChatableRepo {
   name: string;
   owner: string;
   full_name: string;
-  language: string;
+  language: string | null;
   chunk_count: number;
   last_indexed_at: string;
 }
@@ -138,6 +138,10 @@ export default function Chat() {
   const { token } = useAuth();
   const [repos, setRepos] = useState<ChatableRepo[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(true);
+
+  // Read query params for pre-selecting a repo
+  const queryParams = new URLSearchParams(window.location.search);
+  const preselectedRepoId = queryParams.get('repoId') ? Number(queryParams.get('repoId')) : null;
   const [isStreaming, setIsStreaming] = useState(false);
   const [input, setInput] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
@@ -167,8 +171,11 @@ export default function Chat() {
       .then(r => r.ok ? r.json() : [])
       .then((data: ChatableRepo[]) => {
         setRepos(data);
-        // If no persisted repo, auto-select first
-        if (!persisted?.activeRepoId && data.length > 0) {
+        // Check for preselected repo from URL params
+        if (preselectedRepoId && data.some(r => r.repo_id === preselectedRepoId)) {
+          setSelectedRepoId(preselectedRepoId);
+          setMessages(loadRepoMessages(preselectedRepoId));
+        } else if (!persisted?.activeRepoId && data.length > 0) {
           const firstId = data[0].repo_id;
           setSelectedRepoId(firstId);
           setMessages(loadRepoMessages(firstId));
@@ -233,6 +240,12 @@ export default function Chat() {
       message: query.trim(),
       history: historyForAPI,
     };
+
+    // If the selected repo is a public repo (no language field), pass its collection name
+    if (selectedRepo && !selectedRepo.language) {
+      const collectionName = `codebase_public_${selectedRepo.owner}_${selectedRepo.name}`;
+      body.collectionName = collectionName;
+    }
 
     // Only send sessionId when it is a valid positive integer
     if (activeSessionId && typeof activeSessionId === 'number' && activeSessionId > 0) {

@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Navbar        from './components/Navbar';
 import Landing       from './pages/Landing';
-import Playground    from './pages/Playground';
+import Review       from './pages/Review';
 import Dashboard     from './pages/Dashboard';
 import AuthPage      from './pages/AuthPage';
 import GitHubCallback from './pages/GitHubCallback';
@@ -30,11 +30,12 @@ function AppRoutes() {
       <Routes>
         {/* Public */}
         <Route path="/"               element={<Landing />} />
-        <Route path="/playground"     element={<Playground />} />
+        <Route path="/review"        element={<Review />} />
         <Route path="/login"          element={<AuthPage mode="login" />} />
         <Route path="/register"       element={<AuthPage mode="register" />} />
         <Route path="/auth/callback"  element={<GitHubCallback />} />
-        <Route path="/repos"          element={<Protected><Repos /></Protected>} />
+        <Route path="/repos"          element={<Repos />} />
+        <Route path="/repository-browser" element={<Navigate to="/repos" replace />} />
 
         {/* Public — RAG features no longer require GitHub login */}
         <Route path="/chat"           element={<Chat />} />
