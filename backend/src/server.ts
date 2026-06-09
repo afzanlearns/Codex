@@ -8,7 +8,7 @@ import { testConnection } from './db/connection';
 import { register, login, getMe, githubRedirect, githubCallback } from './controllers/authController';
 
 // Controllers — Core Review
-import { reviewPlayground, playgroundValidators } from './controllers/playgroundController';
+import { reviewCode, reviewValidators } from './controllers/reviewController';
 import { getReviewHistory, getReviewById, createShareLink, getSharedReview, detectLanguage, updateGoal } from './controllers/reviewController';
 
 // Controllers — Developer & Team
@@ -25,6 +25,8 @@ import {
   getRepoIndexStatus,
   getAllRepoIndexStatuses,
   deleteRepoIndex,
+  indexPublicRepo,
+  getIndexedPublicRepos,
   seedOwasp,
   getOwaspStatus,
   getFileTree,
@@ -32,6 +34,12 @@ import {
 
 // Controllers — Codebase Chat (Phase 4: new)
 import { chatWithCodebase, getChatableRepos } from './controllers/chatController';
+
+// Controllers — Smart Brief
+import { getRepoBrief } from './controllers/briefController';
+
+// Controllers — Project DNA
+import { generateDna } from './controllers/dnaController';
 
 // Controllers — Refactor Intelligence (Phase 4: new)
 import { getRefactorSuggestions } from './controllers/refactorController';
@@ -74,8 +82,8 @@ app.get('/api/auth/me',        authenticate, ah(getMe));
 app.get('/api/auth/github',          ah(githubRedirect));
 app.get('/api/auth/github/callback', ah(githubCallback));
 
-// ── Playground / Code Review ─────────────────────────────────
-app.post('/api/playground/review', aiLimiter, playgroundValidators, ah(reviewPlayground));
+// ── Code Review ──────────────────────────────────────────────
+app.post('/api/review', aiLimiter, reviewValidators, ah(reviewCode));
 app.post('/api/reviews/detect-language', ah(detectLanguage));
 app.get('/api/reviews/history',        authenticate, ah(getReviewHistory));
 app.get('/api/reviews/share/:slug',    optionalAuthenticate, ah(getSharedReview));
@@ -117,6 +125,8 @@ app.get('/api/rag/jobs/:jobId',            authenticate, ah(getJobStatus));
 app.get('/api/rag/repos',                  authenticate, ah(getAllRepoIndexStatuses));
 app.get('/api/rag/repos/:repoId/status',   authenticate, ah(getRepoIndexStatus));
 app.delete('/api/rag/repos/:repoId',       authenticate, ah(deleteRepoIndex));
+app.post('/api/rag/index-public',             indexLimiter, ah(indexPublicRepo));
+app.get('/api/rag/index-public/repos',                                      ah(getIndexedPublicRepos));
 app.post('/api/rag/owasp/seed',            authenticate, ah(seedOwasp));
 app.get('/api/rag/owasp/status',           authenticate, ah(getOwaspStatus));
 
@@ -129,6 +139,14 @@ app.post('/api/chat',             authenticate, aiLimiter, ah(chatWithCodebase))
 // ── Refactor Intelligence ─────────────────────────────────────
 // POST /api/refactor            — get RAG-grounded refactoring suggestions
 app.post('/api/refactor', authenticate, aiLimiter, ah(getRefactorSuggestions));
+
+// ── Smart Brief (Quick Summarize) ────────────────────────────
+// POST /api/repos/brief          — generate a one-page project brief
+app.post('/api/repos/brief', optionalAuthenticate, aiLimiter, ah(getRepoBrief));
+
+// ── Project DNA ──────────────────────────────────────────────
+// POST /api/dna/generate         — generate project DNA and idea suggestions
+app.post('/api/dna/generate', optionalAuthenticate, aiLimiter, ah(generateDna));
 
 // ── User settings ────────────────────────────────────────────
 app.put('/api/users/goal', authenticate, ah(updateGoal));
