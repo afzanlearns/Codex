@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
+import { Link } from 'react-router-dom';
 
 interface GithubRepo {
   id: number;
@@ -77,7 +78,7 @@ interface RepoAnalysis {
   is_public?: boolean;
 }
 
-type TabKey = 'about' | 'scores' | 'architecture' | 'security' | 'issues' | 'recommendations' | 'files' | 'health';
+type TabKey = 'about' | 'scores' | 'architecture' | 'security' | 'issues' | 'recommendations' | 'files' | 'health' | 'dna';
 
 function scoreColor(s: number): string {
   if (s >= 80) return '#4ade80';
@@ -129,6 +130,9 @@ interface ReposPersistedState {
   lastUrl: string;
   repoInfo: object | null;
   analysis: RepoAnalysis | null;
+  briefData: any | null;
+  dnaData: any | null;
+  indexedResult: { chunks_created: number; repoName: string; repoId?: number } | null;
   activeTab: TabKey;
   savedAt: string;
 }
@@ -193,25 +197,37 @@ export default function Repos() {
   const [healthFilter, setHealthFilter]     = useState<'all' | HealthStatus>('all');
   const [securitySearch, setSecuritySearch] = useState('');
   const [recsSearch, setRecsSearch]         = useState('');
+  const [briefLoading, setBriefLoading]     = useState(false);
+  const [dnaLoading, setDnaLoading]         = useState(false);
+  const [indexing, setIndexing]             = useState(false);
 
   // ── Restore persisted state ──
   const persisted = storageGet<ReposPersistedState>('repos');
-  const [publicUrl, setPublicUrl]   = useState(persisted?.lastUrl ?? '');
-  const [analysis, setAnalysis]     = useState<RepoAnalysis | null>(persisted?.analysis ?? null);
-  const [activeTab, setActiveTab]   = useState<TabKey>(persisted?.activeTab ?? 'about');
-  const [restoredAt]                = useState<string | null>(persisted?.savedAt ?? null);
+  const [publicUrl, setPublicUrl]             = useState(persisted?.lastUrl ?? '');
+  const [analysis, setAnalysis]               = useState<RepoAnalysis | null>(persisted?.analysis ?? null);
+  const [briefData, setBriefData]             = useState<any | null>(persisted?.briefData ?? null);
+  const [dnaData, setDnaData]                 = useState<any | null>(persisted?.dnaData ?? null);
+  const [indexedResult, setIndexedResult]     = useState<{ chunks_created: number; repoName: string; repoId?: number } | null>(persisted?.indexedResult ?? null);
+  const [activeTab, setActiveTab]             = useState<TabKey>(persisted?.activeTab ?? 'about');
+  const [restoredAt]                          = useState<string | null>(persisted?.savedAt ?? null);
 
   // ── Persistence helpers ──
   const persist = useCallback((overrides: Partial<ReposPersistedState> = {}) => {
     storageSet('repos', {
-      lastUrl:   publicUrl,
-      repoInfo:  null,
-      analysis:  analysis,
-      activeTab: activeTab,
-      savedAt:   new Date().toISOString(),
+      lastUrl:       publicUrl,
+      repoInfo:      null,
+      analysis:      analysis,
+      briefData:     briefData,
+      dnaData:       dnaData,
+      indexedResult: indexedResult,
+      activeTab:     activeTab,
+      savedAt:       new Date().toISOString(),
       ...overrides,
     } as ReposPersistedState);
-  }, [publicUrl, analysis, activeTab]);
+  }, [publicUrl, analysis, briefData, dnaData, indexedResult, activeTab]);
+
+  // Auto-persist whenever key analysis data changes
+  useEffect(() => { if (analysis) persist(); }, [analysis, briefData, dnaData, indexedResult]);
 
   function handleTabChange(key: TabKey) {
     setActiveTab(key);
@@ -222,6 +238,9 @@ export default function Repos() {
     storageClear('repos');
     setPublicUrl('');
     setAnalysis(null);
+    setDnaData(null);
+    setBriefData(null);
+    setIndexedResult(null);
     setActiveTab('about');
     setError('');
     setExpandedItem(null);
@@ -248,6 +267,9 @@ export default function Repos() {
   async function handleAnalyzeRepo(repo: GithubRepo) {
     setAnalyzing(repo.full_name);
     setAnalysis(null);
+    setDnaData(null);
+    setBriefData(null);
+    setIndexedResult(null);
     handleTabChange('about');
     setExpandedItem(null);
     const [owner, name] = repo.full_name.split('/');
@@ -285,6 +307,9 @@ export default function Repos() {
     const key = publicUrl.trim();
     setAnalyzing(key);
     setAnalysis(null);
+    setDnaData(null);
+    setBriefData(null);
+    setIndexedResult(null);
     handleTabChange('about');
     setExpandedItem(null);
     setError('');
@@ -297,6 +322,51 @@ export default function Repos() {
       setError(e instanceof Error ? e.message : 'Analysis failed. Check the URL and ensure the repo is public.');
     } finally {
       setAnalyzing(null);
+    }
+  }
+
+  // Auto-generate DNA when analysis completes or on mount (from persisted state)
+  useEffect(() => {
+    if (analysis && !dnaData && !dnaLoading) {
+      generateDNA();
+    }
+  }, [analysis]);
+
+  // Also trigger on mount if analysis was restored but DNA wasn't
+  useEffect(() => {
+    if (analysis && !dnaData && !dnaLoading) {
+      generateDNA();
+    }
+  }, []);
+
+  const generateDNA = async () => {
+    if (!a) return;
+    setDnaLoading(true);
+    try {
+      const data = await api.dna.generate({ analysis_json: a });
+      setDnaData(data);
+    } catch (e) {
+      console.error('DNA generation failed:', e);
+    } finally {
+      setDnaLoading(false);
+    }
+  };
+
+  async function handleIndexPublic() {
+    if (!analysis) return;
+    setIndexing(true);
+    setIndexedResult(null);
+    setError('');
+    try {
+      const [owner, repo] = analysis.repo.full_name.split('/');
+      const result = await api.rag.indexPublic({ owner, repoName: repo });
+      if (result.status === 'already_indexed' || result.status === 'indexed') {
+        setIndexedResult({ chunks_created: result.chunks_created, repoName: analysis.repo.full_name, repoId: result.repoId });
+      }
+    } catch (e) {
+      setError('Indexing failed: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setIndexing(false);
     }
   }
 
@@ -365,6 +435,7 @@ export default function Repos() {
     { key: 'recommendations', label: `Actions (${a?.recommendations?.length ?? 0})`    },
     { key: 'files',           label: `Files (${allFiles.length})`        },
     { key: 'health',          label: 'Health'                            },
+    { key: 'dna',             label: dnaLoading ? 'DNA ⟳' : 'Project DNA' },
   ];
 
   // ── Health data ──
@@ -613,6 +684,42 @@ export default function Repos() {
                 // Clear
               </button>
             </div>
+            {/* Popular repos quick links */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+              <span style={{ fontSize: '0.55rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Popular:
+              </span>
+              {[
+                { name: 'facebook/react', desc: 'UI library' },
+                { name: 'nodejs/node', desc: 'JavaScript runtime' },
+                { name: 'vercel/next.js', desc: 'React framework' },
+                { name: 'tailwindlabs/tailwindcss', desc: 'CSS framework' },
+              ].map(r => (
+                <button
+                  key={r.name}
+                  onClick={() => {
+                    setPublicUrl(`https://github.com/${r.name}`);
+                    setError('');
+                    setAnalysis(null);
+                    setDnaData(null);
+                    setBriefData(null);
+                    setIndexedResult(null);
+                    setActiveTab('about');
+                  }}
+                  title={r.desc}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: '0.65rem', color: 'var(--red)', fontFamily: 'inherit',
+                    padding: '0.125rem 0', textDecoration: 'underline',
+                    textDecorationColor: 'var(--border)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-1)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--red)'; }}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
             {restoredAt && analysis && (
               <p style={{ fontSize: '10px', color: 'var(--text-3)', margin: '0.5rem 0 0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 // restored from {timeAgo(restoredAt)}
@@ -644,6 +751,77 @@ export default function Repos() {
                   </h2>
                   {analysis.repo.description && (
                     <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: 0, lineHeight: '1.8' }}>{analysis.repo.description}</p>
+                  )}
+
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={async () => {
+                        if (!analysis) return;
+                        setBriefLoading(true);
+                        setBriefData(null);
+                        try {
+                          const [owner, repo] = analysis.repo.full_name.split('/');
+                          const data = await api.repos.brief({ owner, repo });
+                          setBriefData(data);
+                        } catch (e) {
+                          setError('Failed to generate brief: ' + (e instanceof Error ? e.message : ''));
+                        } finally {
+                          setBriefLoading(false);
+                        }
+                      }}
+                      disabled={briefLoading || !analysis}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        background: 'transparent',
+                        border: '1px solid var(--border-2)',
+                        color: 'var(--text-2)',
+                        fontSize: '0.6875rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {briefLoading ? 'Generating...' : 'Summarize'}
+                    </button>
+                    <button
+                      onClick={handleIndexPublic}
+                      disabled={indexing || !analysis}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        background: indexing ? 'rgba(74,222,128,0.1)' : 'transparent',
+                        border: '1px solid var(--border-2)',
+                        color: 'var(--text-2)',
+                        fontSize: '0.6875rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {indexing ? 'Indexing...' : 'Index'}
+                    </button>
+                  </div>
+                  {indexedResult && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ fontSize: '0.6875rem', color: '#4ade80' }}>
+                        ✓ Indexed successfully. {indexedResult.chunks_created.toLocaleString()} chunks created.
+                      </span>
+                      <Link
+                        to={`/chat?repoId=${indexedResult.repoId || ''}`}
+                        style={{
+                          color: 'var(--red)',
+                          fontSize: '0.65rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.08em',
+                          textDecoration: 'none',
+                          borderBottom: '1px solid var(--red)',
+                        }}
+                      >
+                        Chat about this repo →
+                      </Link>
+                    </div>
                   )}
                 </div>
 
@@ -690,6 +868,154 @@ export default function Repos() {
                 </div>
               )}
             </div>
+
+            {/* Quick Brief Card */}
+            {briefData && (
+              <div style={{ marginBottom: '1.5rem', border: '1px solid var(--border)', background: 'var(--bg-1)' }}>
+                <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0, marginBottom: '0.25rem' }}>// Quick Brief</p>
+                  <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>{briefData.one_liner || briefData.summary}</p>
+                </div>
+
+                {briefData.what_it_does && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>What it does</p>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: '1.7', margin: 0 }}>{briefData.what_it_does}</p>
+                  </div>
+                )}
+
+                {briefData.tech_stack && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>Tech stack</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {(briefData.tech_stack as string[]).map((item: string, i: number) => (
+                        <Tag key={i}>{item}</Tag>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {briefData.how_it_works && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.5rem' }}>How it works</p>
+                    <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
+                      {(briefData.how_it_works as string[]).map((step: string, i: number) => (
+                        <li key={i} style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '0.25rem' }}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {briefData.data_model && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>Data model</p>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: '1.7', margin: 0 }}>{briefData.data_model}</p>
+                  </div>
+                )}
+
+                {briefData.architecture && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>Architecture</p>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: '1.7', margin: 0 }}>{briefData.architecture}</p>
+                  </div>
+                )}
+
+                {briefData.observations && (
+                  <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.375rem' }}>Observations</p>
+                    {(briefData.observations as string[]).map((obs: string, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ color: 'var(--red)', fontSize: '0.7rem', flexShrink: 0, marginTop: '2px' }}>·</span>
+                        <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: '1.7', margin: 0 }}>{obs}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ padding: '0.625rem 1.5rem', background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', margin: 0 }}>
+                    {briefData.lines_of_code && `${briefData.lines_of_code} LOC`}
+                    {briefData.lines_of_code && briefData.primary_language && ' · '}
+                    {briefData.primary_language}
+                    {briefData.primary_language && briefData.package_manager && ' · '}
+                    {briefData.package_manager}
+                  </p>
+                </div>
+
+                <div style={{ padding: '0.625rem 1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setBriefData(null)}
+                    style={{
+                      background: 'none', border: 'none', color: 'var(--text-3)', fontSize: '0.65rem',
+                      cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em',
+                      padding: 0, fontFamily: 'inherit',
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Inline DNA (auto-generated) */}
+            {dnaLoading && (
+              <div style={{ marginBottom: '1.5rem', border: '1px solid var(--border)', borderLeft: '3px solid var(--red)', padding: '1.25rem 1.5rem', background: 'var(--bg-1)' }}>
+                <p style={{ fontSize: '0.65rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>// Project DNA</p>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', margin: '0.5rem 0 0', lineHeight: '1.6' }}>Extracting underlying technical DNA and generating project ideas...</p>
+              </div>
+            )}
+            {dnaData && (
+              <div style={{ marginBottom: '1.5rem', border: '1px solid var(--border)', background: 'var(--bg-1)' }}>
+                <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0, marginBottom: '0.25rem' }}>// Project DNA</p>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: 0, lineHeight: '1.6' }}>
+                      6 project ideas generated from this repository's technical DNA
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setActiveTab('dna'); }}
+                    style={{
+                      background: 'none', border: '1px solid var(--border)', color: 'var(--text-2)', fontSize: '0.65rem',
+                      cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em',
+                      padding: '0.375rem 0.75rem', fontFamily: 'inherit',
+                    }}
+                  >
+                    View all ideas →
+                  </button>
+                </div>
+                {/* 3 DNA cards inline */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0', borderBottom: '1px solid var(--border)' }}>
+                  {[
+                    { label: 'Core Patterns', items: dnaData.dna?.core_patterns },
+                    { label: 'Transferable Skills', items: dnaData.dna?.transferable_skills },
+                    { label: 'Domain Essence', items: dnaData.dna?.domain_essence ? [dnaData.dna.domain_essence] : [] },
+                  ].map(card => (
+                    <div key={card.label} style={{ padding: '1rem 1.25rem', borderRight: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: '0.55rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>{card.label}</p>
+                      {(card.items || []).slice(0, 3).map((item: string, i: number) => (
+                        <div key={i} style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem' }}>
+                          <span style={{ color: 'var(--red)', fontSize: '0.65rem', flexShrink: 0, marginTop: '2px' }}>·</span>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-2)', lineHeight: '1.5', margin: 0 }}>{item}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {/* First 2 ideas inline */}
+                <div style={{ padding: '1rem 1.5rem' }}>
+                  <p style={{ fontSize: '0.55rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Sample ideas</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    {(dnaData.ideas || []).slice(0, 2).map((idea: any, i: number) => (
+                      <div key={i} style={{ padding: '0.75rem', border: '1px solid var(--border)', background: 'var(--bg)' }}>
+                        <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-1)', margin: '0 0 0.25rem' }}>{idea.title}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-2)', margin: 0, lineHeight: '1.5' }}>{idea.one_liner}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', overflowX: 'auto', padding: '0 40px', marginLeft: '-40px', marginRight: '-40px' }}>
@@ -1402,6 +1728,118 @@ export default function Repos() {
                 </div>
               </div>
             )}
+
+            {/* ── TAB: Project DNA ── */}
+            {activeTab === 'dna' && (
+              <div>
+                {/* Generate DNA button */}
+                {!dnaData && (
+                  <div style={{ padding: '2rem', textAlign: 'center', border: '1px solid var(--border)', borderLeft: '3px solid var(--red)' }}>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', marginBottom: '0.75rem', lineHeight: '1.7' }}>
+                      Extract the underlying technical DNA of this project and generate six original project ideas in different domains that share the same foundation.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        if (!a) return;
+                        setDnaLoading(true);
+                        setDnaData(null);
+                        try {
+                          const data = await api.dna.generate({ analysis_json: a });
+                          setDnaData(data);
+                        } catch (e) {
+                          setError('Failed to generate DNA: ' + (e instanceof Error ? e.message : ''));
+                        } finally {
+                          setDnaLoading(false);
+                        }
+                      }}
+                      disabled={dnaLoading}
+                      className="btn-primary"
+                    >
+                      {dnaLoading ? 'Generating...' : 'Generate project DNA →'}
+                    </button>
+                  </div>
+                )}
+
+                {dnaLoading && (
+                  <div style={{ padding: '3rem', textAlign: 'center' }}>
+                    <div className="loader" style={{ margin: '0 auto 1rem' }} />
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-2)' }}>Analyzing project DNA...</p>
+                  </div>
+                )}
+
+                {dnaData && (
+                  <div>
+                    {/* DNA Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '2rem' }}>
+                      {[
+                        { label: 'Core Patterns', items: dnaData.dna?.core_patterns },
+                        { label: 'Transferable Skills', items: dnaData.dna?.transferable_skills },
+                        { label: 'Domain Essence', items: dnaData.dna?.domain_essence ? [dnaData.dna.domain_essence] : [] },
+                      ].map(card => (
+                        <div key={card.label} style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', padding: '1.25rem' }}>
+                          <p style={{ fontSize: '0.65rem', color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.75rem' }}>{card.label}</p>
+                          {(card.items || []).map((item: string, i: number) => (
+                            <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                              <span style={{ color: 'var(--red)', fontSize: '0.7rem', flexShrink: 0, marginTop: '2px' }}>·</span>
+                              <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.6', margin: 0 }}>{item}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Six Ideas */}
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: '1rem' }}>// Six project ideas with the same DNA</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      {(dnaData.ideas || []).map((idea: any, i: number) => {
+                        const diffColor = idea.difficulty === 'beginner' ? '#4ade80' : idea.difficulty === 'intermediate' ? '#fbbf24' : '#f87171';
+                        return (
+                          <div key={i} style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', padding: '1.25rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>{idea.title}</p>
+                              <span style={{ fontSize: '0.55rem', padding: '0.15rem 0.4rem', background: 'var(--bg-3)', border: '1px solid var(--border-2)', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{idea.domain}</span>
+                            </div>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: '1.6', marginBottom: '0.75rem' }}>{idea.one_liner}</p>
+
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>Why same DNA</p>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-2)', lineHeight: '1.6', margin: 0 }}>{idea.why_same_dna}</p>
+                            </div>
+
+                            {idea.what_transfers_directly && (
+                              <div style={{ marginBottom: '0.75rem' }}>
+                                <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>Transfers directly</p>
+                                {(idea.what_transfers_directly as string[]).map((item: string, j: number) => (
+                                  <div key={j} style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.25rem' }}>
+                                    <span style={{ color: 'var(--red)', fontSize: '0.65rem' }}>→</span>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-2)', lineHeight: '1.5', margin: 0 }}>{item}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {idea.what_is_new && (
+                              <div style={{ marginBottom: '0.75rem' }}>
+                                <p style={{ fontSize: '0.6rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>What's new</p>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-2)', lineHeight: '1.6', margin: 0 }}>{idea.what_is_new}</p>
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                              <span style={{ fontSize: '0.55rem', padding: '0.15rem 0.4rem', background: `${diffColor}15`, border: `1px solid ${diffColor}30`, color: diffColor, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                {idea.difficulty}
+                              </span>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--text-3)', lineHeight: '1.5', margin: 0, textAlign: 'right', flex: 1, marginLeft: '0.75rem' }}>{idea.impact}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         )}
 
