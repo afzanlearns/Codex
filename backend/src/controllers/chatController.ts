@@ -21,11 +21,12 @@ Rules:
 // Body: { message: string, repoId?: number, history?: [{role, content}], sessionId?: number }
 // Returns streaming SSE
 export async function chatWithCodebase(req: Request, res: Response): Promise<void> {
-  const { message, repoId, history = [], sessionId } = req.body as {
+  const { message, repoId, history = [], sessionId, collectionName } = req.body as {
     message: string;
     repoId?: number;
     history?: Array<{ role: string; content: string }>;
     sessionId?: number;
+    collectionName?: string;
   };
 
   const userId = req.user!.id;
@@ -64,14 +65,32 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
     }))
     .slice(-8);
 
-  // Verify repoId belongs to this user
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id FROM indexed_repos WHERE repo_id = ? AND user_id = ? AND status = ?',
-    [repoId, userId, 'ready']
-  );
-  if (!rows.length) {
-    res.status(404).json({ error: 'Repository not indexed or not found. Please index it first.' });
-    return;
+  // Determine collection name
+  let resolvedCollectionName: string | undefined = collectionName;
+  let resolvedRepoId = repoId;
+
+  // If collectionName is provided, use it directly (public repo case)
+  if (!resolvedCollectionName) {
+    // Verify repoId belongs to this user in indexed_repos
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id, chroma_collection FROM indexed_repos WHERE repo_id = ? AND user_id = ? AND status = ?',
+      [repoId, userId, 'ready']
+    );
+    if (rows.length) {
+      resolvedCollectionName = rows[0].chroma_collection || `codebase_${repoId}`;
+    } else {
+      // Try public repos table instead
+      const [publicRows] = await pool.execute<RowDataPacket[]>(
+        'SELECT id, chroma_collection_name FROM indexed_public_repos WHERE id = ? AND status = ?',
+        [repoId, 'ready']
+      );
+      if (publicRows.length) {
+        resolvedCollectionName = publicRows[0].chroma_collection_name;
+      } else {
+        res.status(404).json({ error: 'Repository not indexed or not found. Please index it first.' });
+        return;
+      }
+    }
   }
 
   // Set SSE headers
@@ -89,7 +108,7 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
     // 1. Retrieve relevant code chunks
     sendEvent('status', { message: 'Searching codebase...', phase: 'retrieval' });
 
-    const chunks = await retrievalService.retrieveForChat(message, repoId, userId, 8);
+    const chunks = await retrievalService.retrieveForChat(message, resolvedRepoId, userId, 8, resolvedCollectionName);
 
     if (chunks.length === 0 && repoId) {
       sendEvent('error', { message: 'No relevant code found. Try indexing your repository first.' });
@@ -168,6 +187,7 @@ export async function chatWithCodebase(req: Request, res: Response): Promise<voi
 export async function getChatableRepos(req: Request, res: Response): Promise<void> {
   const userId = req.user!.id;
 
+  // Get user's own indexed repos
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT ir.repo_id, ir.status, ir.chunk_count, ir.last_indexed_at,
             r.name, r.owner, r.full_name, r.language
@@ -178,5 +198,17 @@ export async function getChatableRepos(req: Request, res: Response): Promise<voi
     [userId]
   );
 
-  res.json(rows);
+  // Get public indexed repos (available to all users)
+  const [publicRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id as repo_id, 'ready' as status, chunks_count as chunk_count, completed_at as last_indexed_at,
+            repo_name as name, owner, CONCAT(owner, '/', repo_name) as full_name, NULL as language
+     FROM indexed_public_repos
+     WHERE status = 'ready'
+     ORDER BY completed_at DESC`
+  );
+
+  // Merge both lists (public repos come after user's own repos)
+  const merged = [...rows, ...publicRows];
+
+  res.json(merged);
 }
