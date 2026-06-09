@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Groq from 'groq-sdk';
 import { retrievalService } from '../services/retrievalService';
+import { parseModelJson } from '../utils/jsonParse';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -13,7 +14,7 @@ You receive:
 
 Your task: produce a structured JSON refactoring plan that is GROUNDED in the retrieved evidence.
 
-Respond ONLY with valid JSON — no markdown, no preamble:
+Respond ONLY with valid JSON — no markdown, no preamble, no code fences, no backticks:
 
 {
   "summary": "<2-3 sentence summary of what will be improved and why>",
@@ -126,12 +127,10 @@ export async function getRefactorSuggestions(req: Request, res: Response): Promi
   });
 
   const rawText = response.choices[0]?.message?.content || '';
-  const jsonText = rawText.replace(/```json\n?|\n?```/g, '').trim();
-  const match = jsonText.match(/\{[\s\S]*\}/);
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(match ? match[0] : jsonText);
+    parsed = parseModelJson<Record<string, unknown>>(rawText);
   } catch {
     res.status(500).json({ error: 'Failed to parse refactoring response from AI', raw: rawText.slice(0, 500) });
     return;
