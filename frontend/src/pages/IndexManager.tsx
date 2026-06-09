@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
+import { storageGet, storageSet, storageClear } from '../lib/storage';
 import FileTreePicker from '../components/FileTreePicker';
 import type { TreeNode } from '../types';
 
@@ -96,7 +96,6 @@ export default function IndexManager() {
   // ── Restore persisted state ──
   const persisted = storageGet<IndexPersistedState>('index');
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(persisted?.selectedRepoId ?? null);
-  const [restoredAt, setRestoredAt] = useState<string | null>(persisted?.savedAt ?? null);
 
   const persist = useCallback((repoId: number | null) => {
     storageSet('index', {
@@ -108,7 +107,6 @@ export default function IndexManager() {
   function handleClear() {
     storageClear('index');
     setSelectedRepoId(null);
-    setRestoredAt(null);
     setFileTree(null);
     setTreeError('');
     setSelectedPaths(new Set());
@@ -250,9 +248,24 @@ export default function IndexManager() {
   async function startIndex(repoId: number | null, fullName?: string) {
     setError('');
     try {
+      let body: Record<string, unknown> = {};
+      if (repoId) {
+        body = { repoId };
+      } else if (fullName) {
+        const parts = fullName.split('/');
+        if (parts.length === 2) {
+          body = { owner: parts[0], repoName: parts[1] };
+        } else {
+          setError('Invalid repository name format');
+          return;
+        }
+      } else {
+        setError('No repository selected');
+        return;
+      }
       const res = await fetch(`${API}/api/rag/index`, {
         method: 'POST', headers,
-        body: JSON.stringify(repoId ? { repoId } : { fullName }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -888,7 +901,7 @@ export default function IndexManager() {
               <Link to="/chat" className="btn-ghost" style={{ width: '100%', justifyContent: 'center', fontSize: '0.6rem', marginBottom: '0.5rem', display: 'flex' }}>
                 Chat with codebase →
               </Link>
-              <Link to="/playground" className="btn-ghost" style={{ width: '100%', justifyContent: 'center', fontSize: '0.6rem', display: 'flex' }}>
+              <Link to="/review" className="btn-ghost" style={{ width: '100%', justifyContent: 'center', fontSize: '0.6rem', display: 'flex' }}>
                 RAG-grounded review →
               </Link>
             </div>

@@ -133,8 +133,8 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         </p>
         <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.7rem', color: 'var(--text-3)' }}>
           Or{' '}
-          <Link to="/playground" style={{ color: 'var(--text-2)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
-            try playground without an account 
+          <Link to="/review" style={{ color: 'var(--text-2)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+            try code review without an account 
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </Link>
         </p>

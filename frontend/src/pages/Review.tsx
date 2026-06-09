@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { storageGet, storageSet, storageClear, timeAgo } from '../lib/storage';
-import { Review } from '../types';
+import { Review as ReviewResult } from '../types';
 
 const SecurityIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -121,9 +121,8 @@ function loginUser(req, res) {
   });
 }`;
 
-// Legacy keys kept for backward compat — now handled by storage helpers
-const PERSIST_KEY = 'playground';
- 
+const PERSIST_KEY = 'review';
+
 const ShareIcon = ({ size = 15, color = 'currentColor' }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
     <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
@@ -132,21 +131,20 @@ const ShareIcon = ({ size = 15, color = 'currentColor' }: { size?: number; color
   </svg>
 );
 
-interface PlaygroundPersistedState {
+interface ReviewPersistedState {
   code: string;
   language: string;
-  review: Review | null;
+  review: ReviewResult | null;
   activeTab: 'overview' | 'issues' | 'improvements' | 'details';
   savedAt: string;
 }
 
-export default function Playground() {
-  // ── Restore persisted state on first mount ──
-  const persisted = storageGet<PlaygroundPersistedState>(PERSIST_KEY);
+export default function Review() {
+  const persisted = storageGet<ReviewPersistedState>(PERSIST_KEY);
 
   const [code, setCode]         = useState<string>(persisted?.code ?? '');
   const [language, setLanguage] = useState<string>(persisted?.language ?? 'javascript');
-  const [review, setReview]     = useState<Review | null>(persisted?.review ?? null);
+  const [review, setReview]     = useState<ReviewResult | null>(persisted?.review ?? null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const [activeTab, setActiveTab] = useState<'overview'|'issues'|'improvements'|'details'>(persisted?.activeTab ?? 'overview');
@@ -156,8 +154,7 @@ export default function Playground() {
 
   const codeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Persist on every meaningful state change
-  function persist(overrides: Partial<PlaygroundPersistedState> = {}) {
+  function persist(overrides: Partial<ReviewPersistedState> = {}) {
     storageSet(PERSIST_KEY, {
       code,
       language,
@@ -168,7 +165,6 @@ export default function Playground() {
     });
   }
 
-  // Debounced code persist
   function handleCodeChange(val: string) {
     setCode(val);
     if (codeDebounceRef.current) clearTimeout(codeDebounceRef.current);
@@ -177,13 +173,11 @@ export default function Playground() {
     }, 500);
   }
 
-  // Persist language immediately
   function handleLanguageChange(val: string) {
     setLanguage(val);
     persist({ language: val });
   }
 
-  // Persist tab immediately
   function handleTabChange(tab: 'overview' | 'issues' | 'improvements' | 'details') {
     setActiveTab(tab);
     persist({ activeTab: tab });
@@ -191,7 +185,6 @@ export default function Playground() {
 
   function handleClear() {
     storageClear(PERSIST_KEY);
-    // Also clear legacy keys if any
     try { localStorage.removeItem('pg_code'); localStorage.removeItem('pg_language'); localStorage.removeItem('pg_review'); } catch {}
     setCode('');
     setLanguage('javascript');
@@ -201,7 +194,6 @@ export default function Playground() {
     setError('');
   }
 
-  // Handle shared link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const slug = params.get('share');
@@ -209,7 +201,7 @@ export default function Playground() {
       setLoading(true);
       api.reviews.getShared(slug)
         .then(result => {
-          setReview(result as Review);
+          setReview(result as ReviewResult);
           if ('code' in (result as any)) setCode((result as any).code);
         })
         .catch(e => setError(e.message))
@@ -222,14 +214,14 @@ export default function Playground() {
     try {
       const { language: detected } = await api.reviews.detectLanguage(code);
       if (detected && detected !== language) setLanguage(detected);
-    } catch { /* fail silently */ }
+    } catch {}
   }
 
   async function handleShare() {
     if (!review?.review_id) return;
     try {
       const { slug } = await api.reviews.share(review.review_id);
-      const url = `${window.location.origin}/playground?share=${slug}`;
+      const url = `${window.location.origin}/review?share=${slug}`;
       await navigator.clipboard.writeText(url);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
@@ -249,9 +241,9 @@ export default function Playground() {
     setActiveTab('overview');
     setExpandedIssue(null);
     try {
-      const result = await api.playground.review({ code, language });
-      setReview(result as Review);
-      persist({ review: result as Review, activeTab: 'overview' });
+      const result = await api.review.review({ code, language });
+      setReview(result as ReviewResult);
+      persist({ review: result as ReviewResult, activeTab: 'overview' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Review failed.');
     } finally {
@@ -284,10 +276,10 @@ export default function Playground() {
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Playground</p>
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-1)', margin: 0, letterSpacing: '-0.02em' }}>Instant code review</h1>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 0.4rem' }}>// Code Review</p>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-1)', margin: 0, letterSpacing: '-0.02em' }}>Code Review</h1>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: '0.3rem 0 0' }}>
-                No account needed · Llama 3.3 70B · OWASP-grounded security · Results stored in MySQL
+                Paste any code snippet, select your language, and receive a cited AI review. Every security finding is traced back to a specific OWASP vulnerability entry so you know exactly why something is flagged, not just that it is.
               </p>
               {restoredAt && (
                 <p style={{ fontSize: '10px', color: 'var(--text-3)', margin: '0.5rem 0 0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>

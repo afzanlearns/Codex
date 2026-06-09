@@ -104,8 +104,8 @@ export default function History() {
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-3)', fontSize: '0.875rem' }}>
-              No reviews yet. <Link to="/playground" style={{ color: 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}>
-              Try the playground 
+              No reviews yet. <Link to="/review" style={{ color: 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}>
+              Try code review 
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
           </div>

@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 const FAQS = [
   {
     q: 'Do I need a GitHub account to use Codex?',
-    a: 'No. The playground works instantly — paste any code and get a full AI-grounded review in seconds. GitHub integration is optional and enables repository indexing, codebase chat, and refactor intelligence.',
+    a: 'No. The code review works instantly — paste any code and get a full AI-grounded review in seconds. GitHub integration is optional and enables repository indexing, codebase chat, and refactor intelligence.',
   },
   {
     q: 'What languages are supported?',
@@ -33,7 +33,7 @@ const FAQS = [
   },
   {
     q: 'Is my code stored permanently?',
-    a: 'Playground reviews expire after 7 days and are cleaned up automatically by a MySQL Event Scheduler job. Repository vector indexes persist in ChromaDB until you manually delete them from the Index Manager.',
+    a: 'Code review results expire after 7 days and are cleaned up automatically by a MySQL Event Scheduler job. Repository vector indexes persist in ChromaDB until you manually delete them from the Index Manager.',
   },
 ];
 
@@ -101,8 +101,8 @@ export default function Landing() {
             and chat answer in your actual code — not generic patterns.
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <Link to="/playground" className="btn-primary">
-              Try playground
+            <Link to="/review" className="btn-primary">
+              Try code review
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '0.4rem' }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </Link>
             <Link to={isAuthenticated ? "/chat" : "/register"} className="btn-ghost" id="hero-cta" style={{ color: 'var(--text-1)' }}>
@@ -115,7 +115,7 @@ export default function Landing() {
         {/* Right — stat grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid var(--border)' }}>
           {[
-            { value: '< 5s',  label: 'Time to review',   sub: 'Playground mode' },
+            { value: '< 5s',  label: 'Time to review',   sub: 'Code Review mode' },
             { value: 'BM25+', label: 'Hybrid search',     sub: 'RRF fusion'      },
             { value: '384d',  label: 'Embedding dims',    sub: 'all-MiniLM-L6'   },
             { value: 'OWASP', label: 'Security corpus',   sub: 'Top 10 grounded' },
@@ -236,7 +236,7 @@ export default function Landing() {
           </div>
         </div>
         <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-          <Link to="/playground" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Link to="/review" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
             Try it yourself
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </Link>
@@ -330,8 +330,8 @@ export default function Landing() {
           Index once. Understand everything.
         </h2>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <Link to="/playground" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#fff', color: 'var(--red)', borderColor: '#fff' }}>
-            Open playground
+          <Link to="/review" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#fff', color: 'var(--red)', borderColor: '#fff' }}>
+            Open code review
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </Link>
           <Link to={isAuthenticated ? "/chat" : "/register"} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s, background 0.15s' }}
@@ -355,7 +355,7 @@ export default function Landing() {
             </div>
             <div>
               <p className="label" style={{ marginBottom: '1rem' }}>Product</p>
-              {[['Playground', '/playground'], ['Codebase Chat', '/chat'], ['Refactor', '/refactor'], ['Index Manager', '/index-manager'], ['Dashboard', '/dashboard']].map(([label, href]) => (
+              {[['Code Review', '/review'], ['Codebase Chat', '/chat'], ['Refactor', '/refactor'], ['Index Manager', '/index-manager'], ['Dashboard', '/dashboard']].map(([label, href]) => (
                 <Link key={href} to={href} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-2)', textDecoration: 'none', marginBottom: '0.5rem', transition: 'color 0.15s' }}>
                   {label}
                 </Link>

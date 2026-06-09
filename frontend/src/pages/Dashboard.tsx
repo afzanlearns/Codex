@@ -140,7 +140,7 @@ export default function Dashboard() {
               {user?.name?.split(' ')[0] ?? 'Developer'}
             </h1>
           </div>
-          <Link to="/playground" style={{
+          <Link to="/review" style={{
             display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
             padding: '0.6rem 1.25rem', background: 'var(--red)', borderRadius: 0,
             color: 'var(--text-on-accent)', fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none',
@@ -330,7 +330,7 @@ export default function Dashboard() {
               <div style={{ height: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.875rem' }}>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-3)', margin: 0 }}>No historical trend data detected</p>
                 <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.15)', margin: 0, textAlign: 'center', maxWidth: '400px', lineHeight: 1.6 }}>
-                  Insights are generated from your <span style={{ color: 'var(--text-2)' }}>non-playground</span> repository reviews. 
+                  Insights are generated from your <span style={{ color: 'var(--text-2)' }}>non-review</span> repository reviews. 
                   Snapshots are captured weekly on Sundays.
                 </p>
                 <div style={{ display: 'flex', gap: '1rem' }}>
@@ -392,7 +392,7 @@ export default function Dashboard() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '140px', gap: '0.375rem' }}>
                 <p style={{ fontSize: '0.875rem', color: 'var(--text-3)', margin: 0 }}>No issues yet</p>
-                <Link to="/playground" style={{ fontSize: '0.75rem', color: 'var(--red)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <Link to="/review" style={{ fontSize: '0.75rem', color: 'var(--red)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                   Submit a review
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                 </Link>
@@ -567,7 +567,7 @@ export default function Dashboard() {
                       {g}
                     </div>
                     <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {review.summary || review.pr_title || 'Playground review'}
+                      {review.summary || review.pr_title || 'Code Review'}  
                     </p>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-3)', "fontFamily": "'Geist Mono', monospace", whiteSpace: 'nowrap' }}>
                       {new Date(review.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
