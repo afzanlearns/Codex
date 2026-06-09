@@ -4,6 +4,12 @@ import { getUserRepos, getRepoStructure } from '../services/githubService';
 import { analyzeCodebase } from '../services/aiService';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
+// Clamp scores to fit DECIMAL(4,2) columns (max 99.99)
+function clampScore(val: number | undefined | null, fallback = 0): number {
+  const n = Number(val ?? fallback);
+  return Math.min(Math.max(n, 0), 99.99);
+}
+
 async function getAccessToken(userId: number): Promise<string | null> {
   const [rows] = await pool.execute<RowDataPacket[]>(
     'SELECT github_token FROM users WHERE id = ?', [userId]
@@ -120,15 +126,15 @@ export async function analyzeRepo(req: Request, res: Response): Promise<void> {
       [
         repoId,
         req.user!.id,
-        overallScore,
-        Number(scores.structure ?? 0),
-        Number(scores.code_quality ?? 0),
-        Number(scores.security ?? 0),
-        Number(scores.documentation ?? 0),
-        Number(scores.test_coverage ?? 0),
-        Number(scores.performance ?? 0),
-        Number(scores.maintainability ?? 0),
-        Number(scores.dependency_health ?? 0),
+        clampScore(overallScore),
+        clampScore(scores.structure),
+        clampScore(scores.code_quality),
+        clampScore(scores.security),
+        clampScore(scores.documentation),
+        clampScore(scores.test_coverage),
+        clampScore(scores.performance),
+        clampScore(scores.maintainability),
+        clampScore(scores.dependency_health),
         analysis.summary || '',
         JSON.stringify({
           notes: analysis.architecture_notes || '',
@@ -210,7 +216,7 @@ export async function analyzePublicRepo(req: Request, res: Response): Promise<vo
     } else {
       const sql = 'INSERT INTO repositories (user_id, owner, name, full_name, description, language, is_private, stars, health_score, last_analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
       const values = [
-        req.user!.id,
+        req.user?.id || 1,
         owner,
         repo,
         structure.full_name,
@@ -224,6 +230,7 @@ export async function analyzePublicRepo(req: Request, res: Response): Promise<vo
       repoId = result.insertId;
     }
 
+    const analysisUserId = req.user?.id || 1;
     await pool.execute(
       `INSERT INTO repo_analyses (
          repo_id, user_id, overall_score, structure_score, quality_score, security_score,
@@ -233,16 +240,16 @@ export async function analyzePublicRepo(req: Request, res: Response): Promise<vo
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         repoId,
-        1,
-        overallScore,
-        Number(scores.structure ?? 0),
-        Number(scores.code_quality ?? 0),
-        Number(scores.security ?? 0),
-        Number(scores.documentation ?? 0),
-        Number(scores.test_coverage ?? 0),
-        Number(scores.performance ?? 0),
-        Number(scores.maintainability ?? 0),
-        Number(scores.dependency_health ?? 0),
+        analysisUserId,
+        clampScore(overallScore),
+        clampScore(scores.structure),
+        clampScore(scores.code_quality),
+        clampScore(scores.security),
+        clampScore(scores.documentation),
+        clampScore(scores.test_coverage),
+        clampScore(scores.performance),
+        clampScore(scores.maintainability),
+        clampScore(scores.dependency_health),
         analysis.summary || '',
         JSON.stringify({
           notes: analysis.architecture_notes || '',
