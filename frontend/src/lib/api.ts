@@ -29,9 +29,9 @@ export const api = {
       request<{ token: string; user: unknown }>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
     me: () => request<unknown>('/auth/me'),
   },
-  playground: {
+  review: {
     review: (body: { code: string; language: string; rules?: string[] }) =>
-      request<import('../types').Review>('/playground/review', { method: 'POST', body: JSON.stringify(body) }),
+      request<import('../types').Review>('/review', { method: 'POST', body: JSON.stringify(body) }),
   },
   developers: {
     get: (id: number) => request<import('../types').User>(`/developers/${id}`),
@@ -60,6 +60,14 @@ export const api = {
       request<unknown[]>(`/github/repos/${repoId}/history`),
     repoHealth: (repoId: number) =>
       request<unknown[]>(`/github/repos/${repoId}/health`),
+  },
+  repos: {
+    brief: (body: { owner: string; repo: string }) =>
+      request<unknown>('/repos/brief', { method: 'POST', body: JSON.stringify(body) }),
+  },
+  dna: {
+    generate: (body: { analysis_json: unknown }) =>
+      request<unknown>('/dna/generate', { method: 'POST', body: JSON.stringify(body) }),
   },
   reviews: {
     history: () => request<unknown[]>('/reviews/history'),
@@ -103,5 +111,26 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+    indexPublic: (body: { owner?: string; repoName?: string; url?: string }) =>
+      request<{
+        status: string;
+        repoId: number;
+        owner: string;
+        repoName: string;
+        files_processed: number;
+        chunks_created: number;
+        collection_name: string;
+      }>('/rag/index-public', { method: 'POST', body: JSON.stringify(body) }),
+    getIndexedPublicRepos: () =>
+      request<Array<{
+        id: number;
+        owner: string;
+        repo_name: string;
+        github_url: string;
+        chroma_collection_name: string;
+        files_count: number;
+        chunks_count: number;
+        status: string;
+      }>>('/rag/index-public/repos'),
   },
 };
