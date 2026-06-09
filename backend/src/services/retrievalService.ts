@@ -164,7 +164,8 @@ class RetrievalService {
     question: string,
     repoId: number | undefined,
     userId?: number,
-    topKOverride?: number
+    topKOverride?: number,
+    collectionNameOverride?: string
   ): Promise<RetrievedChunk[]> {
     const startMs = Date.now();
     const topK = topKOverride ?? parseInt(process.env.TOP_K_RETRIEVAL || '5');
@@ -174,7 +175,7 @@ class RetrievalService {
 
     // Query indexed codebase
     if (repoId) {
-      const collectionName = `codebase_${repoId}`;
+      const collectionName = collectionNameOverride || `codebase_${repoId}`;
       corporaQueried.push(collectionName);
       const results = await this.retrieveFromCollection(question, collectionName, topK * 2);
       allResults.push(...results);
