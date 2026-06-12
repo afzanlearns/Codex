@@ -5,9 +5,9 @@ import { useTheme } from '../hooks/useTheme';
 
 const NAV_LINKS = [
   { label: 'Code Review',    href: '/review'         },
-  { label: 'Chat',           href: '/chat'           },
   { label: 'Refactor',       href: '/refactor'       },
   { label: 'Index Manager',  href: '/index-manager'  },
+  { label: 'Chat',           href: '/chat'           },
   { label: 'Repos',          href: '/repos'          },
   { label: 'Dashboard',      href: '/dashboard'      },
 ];

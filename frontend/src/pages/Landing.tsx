@@ -355,7 +355,14 @@ export default function Landing() {
             </div>
             <div>
               <p className="label" style={{ marginBottom: '1rem' }}>Product</p>
-              {[['Code Review', '/review'], ['Codebase Chat', '/chat'], ['Refactor', '/refactor'], ['Index Manager', '/index-manager'], ['Dashboard', '/dashboard']].map(([label, href]) => (
+              {[
+                ['Code Review', '/review'],
+                ['Refactor', '/refactor'],
+                ['Index Manager', '/index-manager'],
+                ['Codebase Chat', '/chat'],
+                ['Repos', '/repos'],
+                ['Dashboard', '/dashboard']
+              ].map(([label, href]) => (
                 <Link key={href} to={href} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-2)', textDecoration: 'none', marginBottom: '0.5rem', transition: 'color 0.15s' }}>
                   {label}
                 </Link>
